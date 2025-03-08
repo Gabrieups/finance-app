@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "2299023e-d9d0-4d15-8194-40bedf342104"
+      }
+    },
+    "android": {
+      "package": "com.hezo.fincontrol"
+    }
+  }
+}

@@ -2,37 +2,20 @@ import type React from "react"
 import { View, Text, StyleSheet, Dimensions } from "react-native"
 import { PieChart } from "react-native-chart-kit"
 import { useTheme } from "../context/ThemeContext"
-import { type Category, useFinance } from "../context/FinanceContext"
+import { useFinance } from "../context/FinanceContext"
 
 const CategoryChart: React.FC = () => {
   const { colors, isDarkMode } = useTheme()
-  const { expensesByCategory, totalSpent } = useFinance()
+  const { expensesByCategory, totalSpent, customCategories } = useFinance()
 
-  const getCategoryLabel = (category: Category): string => {
-    switch (category) {
-      case "MONTHLY_BILLS":
-        return "Contas Mensais"
-      case "GROCERIES":
-        return "Mercado"
-      case "LEISURE":
-        return "Lazer"
-      case "FUEL":
-        return "Gasolina"
-      case "OTHER":
-        return "Outros"
-      default:
-        return "Outros"
-    }
-  }
-
-  const chartData = Object.entries(expensesByCategory)
-    .map(([category, amount], index) => {
-      const colors = ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]
+  const chartData = customCategories
+    .map((category) => {
+      const amount = expensesByCategory[category.id] || 0
       return {
-        name: getCategoryLabel(category as Category),
+        name: category.name,
         amount,
         percentage: totalSpent > 0 ? (amount / totalSpent) * 100 : 0,
-        color: colors[index % colors.length],
+        color: category.color,
         legendFontColor: isDarkMode ? "#FFF" : "#7F7F7F",
         legendFontSize: 12,
       }

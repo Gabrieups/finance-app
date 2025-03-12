@@ -1,12 +1,13 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native"
 import { useTheme } from "../context/ThemeContext"
-import { useFinance } from "../context/FinanceContext"
+import { useFinance, type Expense } from "../context/FinanceContext"
 import BudgetProgressBar from "../components/BudgetProgressBar"
 import ExpenseItem from "../components/ExpenseItem"
+import MonthNavigator from "../components/MonthNavigator"
 import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
 
@@ -16,19 +17,89 @@ const HomeScreen: React.FC = () => {
     monthlyBudget,
     totalSpent,
     remainingBudget,
-    expensesByCategory,
     fixedExpenses,
     variableExpenses,
     isLocked,
     updateFixedExpense,
+    customCategories,
+    getCategoryBudget,
+    getCategorySpent,
+    getCategoryRemaining,
+    getCategoryProgress,
+    getExpenseStatus,
+    monthlyHistory,
+    currentMonth,
   } = useFinance()
   const navigation = useNavigation()
 
-  // Estado para controlar o filtro de despesas fixas (pagas/não pagas)
-  const [showPaidExpenses, setShowPaidExpenses] = useState(false)
+  // Estado para controlar o filtro de despesas fixas (pagas/não pagas/atrasadas)
+  const [fixedExpensesFilter, setFixedExpensesFilter] = useState<"PENDING" | "PAID" | "OVERDUE">("PENDING")
 
-  // Filtrar despesas fixas com base no status de pagamento
-  const filteredFixedExpenses = fixedExpenses.filter((expense) => (showPaidExpenses ? expense.isPaid : !expense.isPaid))
+  // Estado para armazenar os dados do mês atual ou histórico
+  const [displayData, setDisplayData] = useState<{
+    fixedExpenses: Expense[]
+    variableExpenses: Expense[]
+    totalSpent: number
+    budget: number
+  }>({
+    fixedExpenses: [],
+    variableExpenses: [],
+    totalSpent: 0,
+    budget: 0,
+  })
+
+  // Atualizar os dados exibidos quando o mês atual mudar
+  useEffect(() => {
+    // Verificar se estamos visualizando o mês atual
+    const today = new Date()
+    const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
+
+    console.log("HomeScreen - Current Month:", currentMonth)
+    console.log("HomeScreen - Current Month Key:", currentMonthKey)
+    console.log(
+      "HomeScreen - Monthly History:",
+      monthlyHistory.map((h) => h.id),
+    )
+
+    if (currentMonth === currentMonthKey) {
+      // Exibir dados atuais
+      setDisplayData({
+        fixedExpenses,
+        variableExpenses,
+        totalSpent,
+        budget: monthlyBudget,
+      })
+      console.log("HomeScreen - Using current data")
+    } else {
+      // Buscar dados históricos
+      const historicalData = monthlyHistory.find((data) => data.id === currentMonth)
+
+      if (historicalData) {
+        setDisplayData({
+          fixedExpenses: historicalData.fixedExpenses,
+          variableExpenses: historicalData.variableExpenses,
+          totalSpent: historicalData.totalSpent,
+          budget: historicalData.budget,
+        })
+        console.log("HomeScreen - Using historical data:", historicalData.id)
+      } else {
+        // Se não encontrar dados históricos, mostrar dados vazios
+        setDisplayData({
+          fixedExpenses: [],
+          variableExpenses: [],
+          totalSpent: 0,
+          budget: 0,
+        })
+        console.log("HomeScreen - No historical data found")
+      }
+    }
+  }, [currentMonth, fixedExpenses, variableExpenses, totalSpent, monthlyBudget, monthlyHistory])
+
+  // Filtrar despesas fixas com base no status
+  const filteredFixedExpenses = displayData.fixedExpenses.filter((expense) => {
+    const status = getExpenseStatus(expense)
+    return status === fixedExpensesFilter
+  })
 
   // Ordenar por data de vencimento
   const sortedFixedExpenses = [...filteredFixedExpenses].sort((a, b) => {
@@ -38,9 +109,18 @@ const HomeScreen: React.FC = () => {
   })
 
   // Pegar as 5 despesas variáveis mais recentes
-  const recentVariableExpenses = [...variableExpenses]
+  const recentVariableExpenses = [...displayData.variableExpenses]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5)
+
+  // Pegar as 3 categorias mais utilizadas
+  const topCategories = [...customCategories]
+    .sort((a, b) => {
+      const spentA = getCategorySpent(a.id)
+      const spentB = getCategorySpent(b.id)
+      return spentB - spentA
+    })
+    .slice(0, 3)
 
   const handleTogglePaid = (expense) => {
     if (isLocked) return
@@ -54,6 +134,20 @@ const HomeScreen: React.FC = () => {
   const navigateToExpenses = () => {
     navigation.navigate("Expenses")
   }
+
+  // Atualizar a função navigateToCategories no HomeScreen
+  const navigateToCategories = () => {
+    navigation.navigate("Settings", { screen: "Categories" })
+  }
+
+  // Verificar se estamos visualizando o mês atual
+  const today = new Date()
+  const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
+  const isViewingCurrentMonth = currentMonth === currentMonthKey
+
+  // No componente HomeScreen, adicionar uma verificação para meses sem dados
+  const noDataForMonth =
+    !isViewingCurrentMonth && displayData.fixedExpenses.length === 0 && displayData.variableExpenses.length === 0
 
   const styles = StyleSheet.create({
     container: {
@@ -76,11 +170,12 @@ const HomeScreen: React.FC = () => {
       fontSize: 16,
       color: colors.text + "99",
     },
+
     card: {
       backgroundColor: colors.card,
       borderRadius: 12,
       padding: 16,
-      marginBottom: 5,
+      marginBottom: 16,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
@@ -92,7 +187,6 @@ const HomeScreen: React.FC = () => {
       fontWeight: "bold",
       color: colors.text,
       marginBottom: 16,
-      justifyContent: "center",
     },
     budgetContainer: {
       flexDirection: "row",
@@ -111,7 +205,7 @@ const HomeScreen: React.FC = () => {
     remainingValue: {
       fontSize: 16,
       fontWeight: "bold",
-      color: remainingBudget >= 0 ? colors.success : colors.danger,
+      color: displayData.budget - displayData.totalSpent >= 0 ? colors.success : colors.danger,
     },
     sectionTitle: {
       fontSize: 18,
@@ -183,6 +277,12 @@ const HomeScreen: React.FC = () => {
       alignItems: "center",
       marginBottom: 8,
     },
+    sectionHeaderExpenses:{
+      flexDirection: "column",
+      alignItems: "flex-start",
+      marginBottom: 8,
+    },
+
     filterButton: {
       flexDirection: "row",
       alignItems: "center",
@@ -190,11 +290,23 @@ const HomeScreen: React.FC = () => {
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 8,
+      marginLeft: 4,
+      marginBottom: 4,
+    },
+    filterButtonsContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    filterButtonActive: {
+      backgroundColor: colors.primary + "20",
     },
     filterText: {
       fontSize: 14,
       color: colors.text,
       marginLeft: 4,
+    },
+    filterTextActive: {
+      color: colors.primary,
     },
     viewAllButton: {
       flexDirection: "row",
@@ -207,64 +319,206 @@ const HomeScreen: React.FC = () => {
       fontSize: 14,
       marginRight: 4,
     },
+    categoryProgressContainer: {
+      marginBottom: 12,
+    },
+    categoryHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    categoryTitle: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: colors.text,
+    },
+    categoryBudgetInfo: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 4,
+    },
+    categoryBudgetText: {
+      fontSize: 14,
+      color: colors.text + "99",
+    },
+    categoryColorIndicator: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      marginRight: 8,
+    },
+    historicalDataBanner: {
+      backgroundColor: colors.warning + "30",
+      padding: 8,
+      borderRadius: 8,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    historicalDataText: {
+      color: colors.warning,
+      marginLeft: 8,
+      flex: 1,
+    },
+    noDataBanner: {
+      backgroundColor: colors.warning + "20",
+      padding: 16,
+      borderRadius: 8,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    noDataText: {
+      color: colors.warning,
+      marginLeft: 8,
+      flex: 1,
+      fontWeight: "500",
+    },
   })
-
-  const getCategoryLabel = (category: string): string => {
-    switch (category) {
-      case "MONTHLY_BILLS":
-        return "Contas Mensais"
-      case "GROCERIES":
-        return "Mercado"
-      case "LEISURE":
-        return "Lazer"
-      case "FUEL":
-        return "Gasolina"
-      case "OTHER":
-        return "Outros"
-      default:
-        return "Outros"
-    }
-  }
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
-          
-        </View>
+        
+        {/* Navegador de meses */}
+        <MonthNavigator />
+
+        {noDataForMonth && (
+          <View style={styles.noDataBanner}>
+            <Ionicons name="information-circle" size={20} color={colors.warning} />
+            <Text style={styles.noDataText}>Não há dados disponíveis para este mês.</Text>
+          </View>
+        )}
+
+        {/* Banner para dados históricos */}
+        {!isViewingCurrentMonth && (
+          <View style={styles.historicalDataBanner}>
+            <Ionicons name="information-circle" size={20} color={colors.warning} />
+            <Text style={styles.historicalDataText}>
+              Você está visualizando dados históricos. Algumas ações estão desabilitadas.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Orçamento Mensal</Text>
 
           <View style={styles.budgetContainer}>
             <Text style={styles.budgetLabel}>Orçamento Total:</Text>
-            <Text style={styles.budgetValue}>R$ {monthlyBudget.toFixed(2)}</Text>
+            <Text style={styles.budgetValue}>R$ {displayData.budget.toFixed(2)}</Text>
           </View>
 
           <View style={styles.budgetContainer}>
             <Text style={styles.budgetLabel}>Gasto Total:</Text>
-            <Text style={styles.budgetValue}>R$ {totalSpent.toFixed(2)}</Text>
+            <Text style={styles.budgetValue}>R$ {displayData.totalSpent.toFixed(2)}</Text>
           </View>
 
           <View style={styles.budgetContainer}>
             <Text style={styles.budgetLabel}>Saldo Restante:</Text>
-            <Text style={styles.remainingValue}>R$ {remainingBudget.toFixed(2)}</Text>
+            <Text style={styles.remainingValue}>R$ {(displayData.budget - displayData.totalSpent).toFixed(2)}</Text>
           </View>
 
-          <BudgetProgressBar current={totalSpent} total={monthlyBudget} label="Progresso do Orçamento" />
+          <BudgetProgressBar
+            current={displayData.totalSpent}
+            total={displayData.budget}
+            label="Progresso do Orçamento"
+          />
+        </View>
+
+        {/* Seção de Categorias Principais */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Categorias Principais</Text>
+          <TouchableOpacity style={styles.filterButton} onPress={navigateToCategories}>
+            <Ionicons name="options" size={16} color={colors.text} />
+            <Text style={styles.filterText}>Gerenciar</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          {topCategories.length > 0 ? (
+            <>
+              {topCategories.map((category) => {
+                const budget = getCategoryBudget(category.id)
+                const spent = getCategorySpent(category.id)
+                const remaining = getCategoryRemaining(category.id)
+
+                return (
+                  <View key={category.id} style={styles.categoryProgressContainer}>
+                    <View style={styles.categoryHeader}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <View style={[styles.categoryColorIndicator, { backgroundColor: category.color }]} />
+                        <Text style={styles.categoryTitle}>{category.name}</Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.categoryBudgetText,
+                          { fontWeight: "bold", color: remaining >= 0 ? colors.success : colors.danger },
+                        ]}
+                      >
+                        R$ {remaining.toFixed(2)}
+                      </Text>
+                    </View>
+
+                    <BudgetProgressBar current={spent} total={budget} />
+                  </View>
+                )
+              })}
+
+              <TouchableOpacity style={styles.viewAllButton} onPress={navigateToCategories}>
+                <Text style={styles.viewAllText}>Ver todas as categorias</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.noExpensesText}>Nenhuma categoria com gastos encontrada.</Text>
+          )}
         </View>
 
         {/* Seção de Despesas Fixas */}
-        <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderExpenses}>
           <Text style={styles.sectionTitle}>Despesas Fixas</Text>
-          <TouchableOpacity style={styles.filterButton} onPress={() => setShowPaidExpenses(!showPaidExpenses)}>
-            <Ionicons
-              name={showPaidExpenses ? "checkmark-circle" : "ellipse-outline"}
-              size={16}
-              color={showPaidExpenses ? colors.success : colors.text}
-            />
-            <Text style={styles.filterText}>{showPaidExpenses ? "Pagas" : "Pendentes"}</Text>
-          </TouchableOpacity>
+          <View style={styles.filterButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.filterButton, fixedExpensesFilter === "PENDING" && styles.filterButtonActive]}
+              onPress={() => setFixedExpensesFilter("PENDING")}
+            >
+              <Ionicons
+                name="ellipse-outline"
+                size={16}
+                color={fixedExpensesFilter === "PENDING" ? colors.primary : colors.text}
+              />
+              <Text style={[styles.filterText, fixedExpensesFilter === "PENDING" && styles.filterTextActive]}>
+                Pendentes
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.filterButton, fixedExpensesFilter === "OVERDUE" && styles.filterButtonActive]}
+              onPress={() => setFixedExpensesFilter("OVERDUE")}
+            >
+              <Ionicons
+                name="alert-circle"
+                size={16}
+                color={fixedExpensesFilter === "OVERDUE" ? colors.primary : colors.danger}
+              />
+              <Text style={[styles.filterText, fixedExpensesFilter === "OVERDUE" && styles.filterTextActive]}>
+                Atrasadas
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.filterButton, fixedExpensesFilter === "PAID" && styles.filterButtonActive]}
+              onPress={() => setFixedExpensesFilter("PAID")}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={fixedExpensesFilter === "PAID" ? colors.primary : colors.success}
+              />
+              <Text style={[styles.filterText, fixedExpensesFilter === "PAID" && styles.filterTextActive]}>Pagas</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -274,9 +528,9 @@ const HomeScreen: React.FC = () => {
                 <ExpenseItem
                   key={expense.id}
                   expense={expense}
-                  onEdit={() => navigation.navigate("Expenses")}
+                  onEdit={() => isViewingCurrentMonth && navigation.navigate("Expenses")}
                   onDelete={() => {}}
-                  onTogglePaid={() => handleTogglePaid(expense)}
+                  onTogglePaid={() => isViewingCurrentMonth && handleTogglePaid(expense)}
                 />
               ))}
 
@@ -289,25 +543,10 @@ const HomeScreen: React.FC = () => {
             </>
           ) : (
             <Text style={styles.noExpensesText}>
-              Nenhuma despesa fixa {showPaidExpenses ? "paga" : "pendente"} encontrada.
+              Nenhuma despesa fixa{" "}
+              {fixedExpensesFilter === "PENDING" ? "pendente" : fixedExpensesFilter === "OVERDUE" ? "atrasada" : "paga"}{" "}
+              encontrada.
             </Text>
-          )}
-        </View>
-
-        <Text style={styles.sectionTitle}>Gastos por Categoria</Text>
-        <View style={styles.card}>
-          {Object.entries(expensesByCategory).map(
-            ([category, amount]) =>
-              amount > 0 && (
-                <View key={category} style={styles.categoryItem}>
-                  <Text style={styles.categoryName}>{getCategoryLabel(category)}</Text>
-                  <Text style={styles.categoryAmount}>R$ {amount.toFixed(2)}</Text>
-                </View>
-              ),
-          )}
-
-          {Object.values(expensesByCategory).every((amount) => amount === 0) && (
-            <Text style={styles.noExpensesText}>Nenhum gasto registrado</Text>
           )}
         </View>
 
@@ -330,4 +569,3 @@ const HomeScreen: React.FC = () => {
 }
 
 export default HomeScreen
-

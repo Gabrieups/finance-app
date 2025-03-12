@@ -1,5 +1,6 @@
 import { NavigationContainer } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
+import { createStackNavigator } from "@react-navigation/stack"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 import { StatusBar } from "expo-status-bar"
 import { ThemeProvider } from "./context/ThemeContext"
@@ -9,17 +10,29 @@ import { useTheme } from "./context/ThemeContext"
 
 // Screens
 import HomeScreen from "./screens/HomeScreen"
-import ExpensesScreen from "./screens/ExpensesScreen" // Nova tela unificada
+import ExpensesScreen from "./screens/ExpensesScreen"
 import AnalyticsScreen from "./screens/AnalyticsScreen"
 import SettingsScreen from "./screens/SettingsScreen"
+import CategoriesScreen from "./screens/CategoriesScreen"
 import { useFinance } from "./context/FinanceContext"
 
 // Importar o componente AddExpenseButton
 import AddExpenseButton from "./components/AddExpenseButton"
 
 const Tab = createBottomTabNavigator()
+const Stack = createStackNavigator()
 
-// Modificar o AppNavigator para incluir apenas uma aba de despesas
+// Criar um stack navigator para as configurações
+const SettingsStack = () => {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="SettingsMain" component={SettingsScreen} />
+      <Stack.Screen name="Categories" component={CategoriesScreen} />
+    </Stack.Navigator>
+  )
+}
+
+// Modificar o AppNavigator para remover a tela de categorias do tab navigator
 const AppNavigator = () => {
   const { colors } = useTheme()
   const { customTabNames } = useFinance()
@@ -60,7 +73,7 @@ const AppNavigator = () => {
         <Tab.Screen name="Home" component={HomeScreen} options={{ title: customTabNames.home }} />
         <Tab.Screen name="Expenses" component={ExpensesScreen} options={{ title: "Despesas" }} />
         <Tab.Screen name="Analytics" component={AnalyticsScreen} options={{ title: customTabNames.analytics }} />
-        <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: customTabNames.settings }} />
+        <Tab.Screen name="Settings" component={SettingsStack} options={{ title: customTabNames.settings }} />
       </Tab.Navigator>
 
       {/* Adicionar o botão centralizado */}

@@ -4,18 +4,16 @@ import { Ionicons } from "@expo/vector-icons"
 import { useTheme } from "../context/ThemeContext"
 import { type Category, type Expense, type PaymentMethod, useFinance } from "../context/FinanceContext"
 
-// Atualizar a interface ExpenseItemProps
 interface ExpenseItemProps {
   expense: Expense
   onEdit: () => void
   onDelete: () => void
-  onTogglePaid?: () => void // Opcional para despesas variáveis
+  onTogglePaid?: () => void
 }
 
-// No componente, adicionar a opção de clicar no status para alternar
 const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, onTogglePaid }) => {
   const { colors } = useTheme()
-  const { isLocked } = useFinance()
+  const { isLocked, getExpenseStatus } = useFinance()
 
   const getCategoryLabel = (category: Category): string => {
     switch (category) {
@@ -81,6 +79,54 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
     }
   }
 
+  // Obter o status da despesa
+  const expenseStatus = expense.isFixed ? getExpenseStatus(expense) : null
+
+  // Definir ícone e cor com base no status
+  const getStatusIcon = () => {
+    if (!expense.isFixed) return null
+
+    switch (expenseStatus) {
+      case "PAID":
+        return {
+          icon: "checkmark-circle",
+          color: colors.success,
+        }
+      case "OVERDUE":
+        return {
+          icon: "alert-circle",
+          color: colors.danger,
+        }
+      case "PENDING":
+        return {
+          icon: "ellipse-outline",
+          color: colors.text + "99",
+        }
+      default:
+        return {
+          icon: "ellipse-outline",
+          color: colors.text + "99",
+        }
+    }
+  }
+
+  const getStatusLabel = () => {
+    if (!expense.isFixed) return ""
+
+    switch (expenseStatus) {
+      case "PAID":
+        return "Pago"
+      case "OVERDUE":
+        return "Atrasado"
+      case "PENDING":
+        return "Pendente"
+      default:
+        return "Pendente"
+    }
+  }
+
+  const statusInfo = getStatusIcon()
+
   const styles = StyleSheet.create({
     container: {
       backgroundColor: colors.card,
@@ -132,9 +178,22 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
     actionButton: {
       marginLeft: 16,
     },
+    // Estilo para o status
+    statusText: {
+      fontSize: 14,
+      marginLeft: 4,
+    },
+    statusPaid: {
+      color: colors.success,
+    },
+    statusOverdue: {
+      color: colors.danger,
+    },
+    statusPending: {
+      color: colors.text + "99",
+    },
   })
 
-  // Atualizar o return para incluir os novos campos
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -153,7 +212,7 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
           <Text style={styles.detailText}>{getPaymentMethodLabel(expense.paymentMethod)}</Text>
         </View>
 
-        {expense.date && (
+        {expense.date && !expense.isFixed && (
           <View style={styles.detailItem}>
             <Ionicons name="calendar-outline" size={16} color={colors.text + "99"} />
             <Text style={styles.detailText}>{expense.date}</Text>
@@ -161,7 +220,7 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
         )}
       </View>
 
-      {/* Adicionar informações de vencimento e pagamento para despesas fixas */}
+      {/* Informações de vencimento e status para despesas fixas */}
       {expense.isFixed && expense.dueDate && (
         <View style={[styles.details, { marginTop: 4 }]}>
           <View style={styles.detailItem}>
@@ -171,24 +230,34 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
 
           {!isLocked && onTogglePaid ? (
             <TouchableOpacity style={styles.detailItem} onPress={onTogglePaid}>
-              <Ionicons
-                name={expense.isPaid ? "checkmark-circle" : "ellipse-outline"}
-                size={16}
-                color={expense.isPaid ? colors.success : colors.text + "99"}
-              />
-              <Text style={[styles.detailText, expense.isPaid ? { color: colors.success } : {}]}>
-                {expense.isPaid ? "Pago" : "Pendente"}
+              <Ionicons name={statusInfo.icon} size={16} color={statusInfo.color} />
+              <Text
+                style={[
+                  styles.statusText,
+                  expenseStatus === "PAID"
+                    ? styles.statusPaid
+                    : expenseStatus === "OVERDUE"
+                      ? styles.statusOverdue
+                      : styles.statusPending,
+                ]}
+              >
+                {getStatusLabel()}
               </Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.detailItem}>
-              <Ionicons
-                name={expense.isPaid ? "checkmark-circle" : "ellipse-outline"}
-                size={16}
-                color={expense.isPaid ? colors.success : colors.text + "99"}
-              />
-              <Text style={[styles.detailText, expense.isPaid ? { color: colors.success } : {}]}>
-                {expense.isPaid ? "Pago" : "Pendente"}
+              <Ionicons name={statusInfo.icon} size={16} color={statusInfo.color} />
+              <Text
+                style={[
+                  styles.statusText,
+                  expenseStatus === "PAID"
+                    ? styles.statusPaid
+                    : expenseStatus === "OVERDUE"
+                      ? styles.statusOverdue
+                      : styles.statusPending,
+                ]}
+              >
+                {getStatusLabel()}
               </Text>
             </View>
           )}

@@ -2,18 +2,43 @@
 
 import type React from "react"
 import { useState } from "react"
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert, TextInput } from "react-native"
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert, ScrollView, TextInput } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { useFinance } from "../context/FinanceContext"
 import { Ionicons } from "@expo/vector-icons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
+import { useNavigation } from "@react-navigation/native"
+
+interface TabNames {
+  fixed: string
+  variable: string
+}
 
 const SettingsScreen: React.FC = () => {
   const { colors, themeMode, setThemeMode, isDarkMode } = useTheme()
-  const { monthlyBudget, setMonthlyBudget, isLocked, toggleLock, syncWithFirebase, toggleFirebaseSync } = useFinance()
+  const {
+    monthlyBudget,
+    setMonthlyBudget,
+    isLocked,
+    toggleLock,
+    syncWithFirebase,
+    toggleFirebaseSync,
+    customTabNames,
+    updateTabName,
+    resetTabNames,
+    categoryBudgetPercentages,
+    updateCategoryPercentage,
+    resetCategoryPercentages,
+    resetDay,
+    setResetDay,
+  } = useFinance()
+
+  const navigation = useNavigation()
 
   const [editingBudget, setEditingBudget] = useState(false)
   const [budgetValue, setBudgetValue] = useState(monthlyBudget.toString())
+  const [editingResetDay, setEditingResetDay] = useState(false)
+  const [resetDayValue, setResetDayValue] = useState(resetDay.toString())
 
   const handleSaveBudget = () => {
     const newBudget = Number.parseFloat(budgetValue)
@@ -22,6 +47,16 @@ const SettingsScreen: React.FC = () => {
       setEditingBudget(false)
     } else {
       Alert.alert("Valor inválido", "Por favor, insira um valor numérico válido.")
+    }
+  }
+
+  const handleSaveResetDay = () => {
+    const newResetDay = Number.parseInt(resetDayValue)
+    if (!isNaN(newResetDay) && newResetDay >= 1 && newResetDay <= 31) {
+      setResetDay(newResetDay)
+      setEditingResetDay(false)
+    } else {
+      Alert.alert("Valor inválido", "Por favor, insira um dia válido entre 1 e 31.")
     }
   }
 
@@ -52,6 +87,27 @@ const SettingsScreen: React.FC = () => {
       Alert.alert("Erro", "Ocorreu um erro ao exportar os dados.")
       console.error("Export error:", error)
     }
+  }
+
+  const getCategoryLabel = (category: string): string => {
+    switch (category) {
+      case "MONTHLY_BILLS":
+        return "Contas Mensais"
+      case "GROCERIES":
+        return "Mercado"
+      case "LEISURE":
+        return "Lazer"
+      case "FUEL":
+        return "Gasolina"
+      case "OTHER":
+        return "Outros"
+      default:
+        return "Outros"
+    }
+  }
+
+  const navigateToCategories = () => {
+    navigation.navigate("Categories")
   }
 
   const styles = StyleSheet.create({
@@ -159,13 +215,39 @@ const SettingsScreen: React.FC = () => {
     themeOptionTextSelected: {
       color: "#FFFFFF",
     },
+    // Adicionar novos estilos
+    editorSection: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    resetButton: {
+      backgroundColor: colors.warning,
+      padding: 12,
+      borderRadius: 8,
+      alignItems: "center",
+      marginTop: 8,
+    },
+    resetButtonText: {
+      color: "#FFFFFF",
+      fontWeight: "bold",
+      fontSize: 14,
+    },
+    percentageInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 4,
+      padding: 8,
+      width: 80,
+      color: colors.text,
+    },
   })
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-        </View>
+      <ScrollView style={styles.content}>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Orçamento</Text>
@@ -222,16 +304,6 @@ const SettingsScreen: React.FC = () => {
             />
           </View>
 
-          <View style={styles.settingItem}>
-            <Text style={styles.settingLabel}>Sincronizar com Firebase</Text>
-            <Switch
-              value={syncWithFirebase}
-              onValueChange={toggleFirebaseSync}
-              trackColor={{ false: colors.border, true: colors.primary + "80" }}
-              thumbColor={syncWithFirebase ? colors.primary : "#f4f3f4"}
-            />
-          </View>
-
           <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
             <Text style={styles.settingLabel}>Tema</Text>
           </View>
@@ -269,10 +341,9 @@ const SettingsScreen: React.FC = () => {
         <TouchableOpacity style={styles.exportButton} onPress={handleExportData}>
           <Text style={styles.exportButtonText}>Exportar Dados</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   )
 }
 
 export default SettingsScreen
-

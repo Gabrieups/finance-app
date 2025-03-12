@@ -1,14 +1,31 @@
 import type React from "react"
-import { View, Text, StyleSheet, ScrollView } from "react-native"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { useFinance } from "../context/FinanceContext"
 import CategoryChart from "../components/CategoryChart"
 import PaymentMethodChart from "../components/PaymentMethodChart"
 import BudgetProgressBar from "../components/BudgetProgressBar"
+import { useNavigation } from "@react-navigation/native"
+import { Ionicons } from "@expo/vector-icons"
 
 const AnalyticsScreen: React.FC = () => {
   const { colors } = useTheme()
-  const { monthlyBudget, totalSpent, remainingBudget, expensesByCategory } = useFinance()
+  const {
+    monthlyBudget,
+    totalSpent,
+    remainingBudget,
+    customCategories,
+    getCategoryBudget,
+    getCategorySpent,
+    getCategoryProgress,
+  } = useFinance()
+
+  // Adicionar a função de navegação para categorias, se necessário
+  const navigation = useNavigation()
+
+  const navigateToCategories = () => {
+    navigation.navigate("Settings", { screen: "Categories" })
+  }
 
   const styles = StyleSheet.create({
     container: {
@@ -76,39 +93,45 @@ const AnalyticsScreen: React.FC = () => {
       color: colors.text,
       marginBottom: 4,
     },
+    categoryBudgetInfo: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 4,
+    },
+    categoryBudgetLabel: {
+      fontSize: 14,
+      color: colors.text + "99",
+    },
+    categoryBudgetValue: {
+      fontSize: 14,
+      color: colors.text,
+    },
+    categoryBudgetRemaining: {
+      fontSize: 14,
+      fontWeight: "bold",
+    },
+    viewAllButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: colors.card,
+      marginTop: 16,
+      alignSelf: "center",
+    },
+    viewAllText: {
+      fontSize: 14,
+      fontWeight: "bold",
+      color: colors.primary,
+      marginRight: 4,
+    },
   })
-
-  const getCategoryLabel = (category: string): string => {
-    switch (category) {
-      case "MONTHLY_BILLS":
-        return "Contas Mensais"
-      case "GROCERIES":
-        return "Mercado"
-      case "LEISURE":
-        return "Lazer"
-      case "FUEL":
-        return "Gasolina"
-      case "OTHER":
-        return "Outros"
-      default:
-        return "Outros"
-    }
-  }
-
-  // Calculate category budget percentages
-  const categoryBudgetPercentages = {
-    MONTHLY_BILLS: 0.5, // 50% for monthly bills
-    GROCERIES: 0.2, // 20% for groceries
-    LEISURE: 0.1, // 10% for leisure
-    FUEL: 0.1, // 10% for fuel
-    OTHER: 0.1, // 10% for other
-  }
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
-        </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Visão Geral do Orçamento</Text>
@@ -138,15 +161,44 @@ const AnalyticsScreen: React.FC = () => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Progresso por Categoria</Text>
 
-          {Object.entries(expensesByCategory).map(([category, amount]) => {
-            const categoryBudget = monthlyBudget * categoryBudgetPercentages[category]
+          {customCategories.map((category) => {
+            const budget = getCategoryBudget(category.id)
+            const spent = getCategorySpent(category.id)
+            const remaining = budget - spent
+            const progress = getCategoryProgress(category.id)
+
             return (
-              <View key={category} style={styles.categoryProgressContainer}>
-                <Text style={styles.categoryTitle}>{getCategoryLabel(category)}</Text>
-                <BudgetProgressBar current={amount} total={categoryBudget} />
+              <View key={category.id} style={styles.categoryProgressContainer}>
+                <Text style={styles.categoryTitle}>{category.name}</Text>
+
+                <View style={styles.categoryBudgetInfo}>
+                  <Text style={styles.categoryBudgetLabel}>Orçamento:</Text>
+                  <Text style={styles.categoryBudgetValue}>R$ {budget.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.categoryBudgetInfo}>
+                  <Text style={styles.categoryBudgetLabel}>Gasto:</Text>
+                  <Text style={styles.categoryBudgetValue}>R$ {spent.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.categoryBudgetInfo}>
+                  <Text style={styles.categoryBudgetLabel}>Restante:</Text>
+                  <Text
+                    style={[styles.categoryBudgetRemaining, { color: remaining >= 0 ? colors.success : colors.danger }]}
+                  >
+                    R$ {remaining.toFixed(2)}
+                  </Text>
+                </View>
+
+                <BudgetProgressBar current={spent} total={budget} />
               </View>
             )
           })}
+          {/* Adicionar um botão para navegar para categorias, se necessário */}
+          <TouchableOpacity style={styles.viewAllButton} onPress={navigateToCategories}>
+            <Text style={styles.viewAllText}>Gerenciar categorias</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -154,4 +206,3 @@ const AnalyticsScreen: React.FC = () => {
 }
 
 export default AnalyticsScreen
-

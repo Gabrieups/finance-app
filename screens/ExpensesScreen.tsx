@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, Modal } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { useFinance } from "../context/FinanceContext"
@@ -30,40 +30,55 @@ const ExpensesScreen: React.FC = () => {
   const [filterType, setFilterType] = useState<FilterType>("ALL")
   const [searchQuery, setSearchQuery] = useState("")
   const [showFilterModal, setShowFilterModal] = useState(false)
+  const [isVariable, setIsVariable] = useState(false)
+  const [filteredExpensesState, setFilteredExpensesState] = useState([])
 
   // Combinar as despesas fixas e variáveis
   const allExpenses = [...fixedExpenses, ...variableExpenses]
 
-  // Filtrar despesas com base no tipo e na busca
-  const filteredExpenses = allExpenses.filter((expense) => {
-    // Filtrar por tipo
-    if (filterType === "FIXED" && !expense.isFixed) return false
-    if (filterType === "VARIABLE" && expense.isFixed) return false
+  useEffect(() => {
+    // Filtrar despesas com base no tipo e na busca
+    const filtered = allExpenses.filter((expense) => {
+      // Filtrar por tipo
+      if (filterType === "FIXED" && !expense.isFixed) return false
+      if (filterType === "VARIABLE" && expense.isFixed) return false
 
-    // Filtrar por busca
-    if (searchQuery && !expense.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
+      // Filtrar por busca
+      if (searchQuery && !expense.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
 
-    return true
-  })
+      return true
+    })
 
-  // Ordenar despesas por data (mais recentes primeiro)
-  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
-    const dateA = a.isFixed ? a.dueDate || "" : a.date
-    const dateB = b.isFixed ? b.dueDate || "" : b.date
-    return new Date(dateB).getTime() - new Date(dateA).getTime()
-  })
+    // Ordenar despesas por data (mais recentes primeiro)
+    const sorted = [...filtered].sort((a, b) => {
+      const dateA = a.isFixed ? a.dueDate || "" : a.date
+      const dateB = b.isFixed ? b.dueDate || "" : b.date
+      return new Date(dateB).getTime() - new Date(dateA).getTime()
+    })
 
-  const handleAddExpense = (isFixed: boolean) => {
+    setFilteredExpensesState(sorted)
+  }, [fixedExpenses, variableExpenses, filterType, searchQuery])
+
+  // Função para adicionar despesa variável
+  const handleAddVariableExpense = () => {
     if (isLocked) return
     setEditingExpense(null)
+    setIsVariable(true)
     setShowForm(true)
-    // Definir o tipo de despesa que será adicionada
-    setEditingExpense({ isFixed })
+  }
+
+  // Função para adicionar despesa fixa
+  const handleAddFixedExpense = () => {
+    if (isLocked) return
+    setEditingExpense(null)
+    setIsVariable(false)
+    setShowForm(true)
   }
 
   const handleEditExpense = (expense) => {
     if (isLocked) return
     setEditingExpense(expense)
+    setIsVariable(!expense.isFixed)
     setShowForm(true)
   }
 
@@ -80,6 +95,10 @@ const ExpensesScreen: React.FC = () => {
           } else {
             deleteVariableExpense(expense.id)
           }
+
+          // Forçar atualização da lista
+          const updatedExpenses = filteredExpensesState.filter((item) => item.id !== expense.id)
+          setFilteredExpensesState(updatedExpenses)
         },
       },
     ])
@@ -87,16 +106,16 @@ const ExpensesScreen: React.FC = () => {
 
   const handleSubmit = (expense) => {
     const isNewExpense = !expense.id
-    const isFixed = editingExpense?.isFixed || expense.isFixed
+    const isFixedExpense = !isVariable
 
     if (isNewExpense) {
-      if (isFixed) {
+      if (isFixedExpense) {
         addFixedExpense(expense)
       } else {
         addVariableExpense(expense)
       }
     } else {
-      if (isFixed) {
+      if (expense.isFixed) {
         updateFixedExpense(expense)
       } else {
         updateVariableExpense(expense)
@@ -172,13 +191,17 @@ const ExpensesScreen: React.FC = () => {
       color: colors.text,
       marginLeft: 4,
     },
+    // Estilo para os botões de adicionar
     addButton: {
+      flex: 1,
       backgroundColor: colors.primary,
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 8,
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+      marginHorizontal: 4,
     },
     addButtonText: {
       color: "#FFFFFF",
@@ -261,7 +284,7 @@ const ExpensesScreen: React.FC = () => {
     },
     typeTag: {
       position: "absolute",
-      bottom: 25,
+      bottom: 25 ,
       left: 15,
       paddingHorizontal: 8,
       paddingVertical: 4,
@@ -292,11 +315,11 @@ const ExpensesScreen: React.FC = () => {
         <ExpenseForm
           initialValues={{
             ...editingExpense,
-            isFixed: editingExpense?.isFixed || false,
+            isFixed: editingExpense?.isFixed || !isVariable,
           }}
           onSubmit={handleSubmit}
           onCancel={() => setShowForm(false)}
-          isVariable={!editingExpense?.isFixed}
+          isVariable={isVariable}
         />
       </View>
     )
@@ -305,6 +328,7 @@ const ExpensesScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+
         {/* Barra de pesquisa */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color={colors.text + "80"} />
@@ -322,18 +346,29 @@ const ExpensesScreen: React.FC = () => {
           ) : null}
         </View>
 
-        {/* Filtros e botão de adicionar */}
+        {/* Filtros */}
         <View style={styles.filterContainer}>
           <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilterModal(true)}>
             <Ionicons name="filter" size={20} color={colors.text} />
             <Text style={styles.filterText}>{getFilterLabel(filterType)}</Text>
           </TouchableOpacity>
+
+          {/* Container para os dois botões de adicionar */}
+          {!isLocked && (
+            <View>
+              {/* Botão para adicionar despesa fixa */}
+              <TouchableOpacity style={styles.addButton} onPress={handleAddFixedExpense}>
+                <Ionicons name="calendar" size={20} color="#FFFFFF" />
+                <Text style={styles.addButtonText}>Nova Despesa Fixa</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
 
-      {sortedExpenses.length > 0 ? (
+      {filteredExpensesState.length > 0 ? (
         <FlatList
-          data={sortedExpenses}
+          data={filteredExpensesState}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View>
@@ -358,7 +393,7 @@ const ExpensesScreen: React.FC = () => {
         <View style={styles.emptyContainer}>
           <Ionicons name="receipt-outline" size={64} color={colors.text + "40"} />
           <Text style={styles.emptyText}>
-            Nenhuma despesa encontrada. {!isLocked ? "Toque no botão + para adicionar." : ""}
+            Nenhuma despesa encontrada. {!isLocked ? "Toque em um dos botões para adicionar." : ""}
           </Text>
         </View>
       )}

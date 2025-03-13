@@ -18,7 +18,6 @@ const SettingsScreen: React.FC = () => {
   const { colors, themeMode, setThemeMode, isDarkMode } = useTheme()
   const {
     monthlyBudget,
-    setMonthlyBudget,
     isLocked,
     toggleLock,
     syncWithFirebase,
@@ -26,29 +25,14 @@ const SettingsScreen: React.FC = () => {
     customTabNames,
     updateTabName,
     resetTabNames,
-    categoryBudgetPercentages,
-    updateCategoryPercentage,
-    resetCategoryPercentages,
     resetDay,
     setResetDay,
   } = useFinance()
 
   const navigation = useNavigation()
 
-  const [editingBudget, setEditingBudget] = useState(false)
-  const [budgetValue, setBudgetValue] = useState(monthlyBudget.toString())
   const [editingResetDay, setEditingResetDay] = useState(false)
   const [resetDayValue, setResetDayValue] = useState(resetDay.toString())
-
-  const handleSaveBudget = () => {
-    const newBudget = Number.parseFloat(budgetValue)
-    if (!isNaN(newBudget) && newBudget >= 0) {
-      setMonthlyBudget(newBudget)
-      setEditingBudget(false)
-    } else {
-      Alert.alert("Valor inválido", "Por favor, insira um valor numérico válido.")
-    }
-  }
 
   const handleSaveResetDay = () => {
     const newResetDay = Number.parseInt(resetDayValue)
@@ -56,18 +40,17 @@ const SettingsScreen: React.FC = () => {
       setResetDay(newResetDay)
       setEditingResetDay(false)
     } else {
-      Alert.alert("Valor inválido", "Por favor, insira um dia válido entre 1 e 31.")
     }
   }
 
   const handleExportData = async () => {
     try {
-      const budgetData = await AsyncStorage.getItem("monthlyBudget")
       const fixedData = await AsyncStorage.getItem("fixedExpenses")
       const variableData = await AsyncStorage.getItem("variableExpenses")
+      const categoriesData = await AsyncStorage.getItem("customCategories")
 
       const exportData = {
-        monthlyBudget: budgetData,
+        customCategories: categoriesData ? JSON.parse(categoriesData) : [],
         fixedExpenses: fixedData ? JSON.parse(fixedData) : [],
         variableExpenses: variableData ? JSON.parse(variableData) : [],
         exportDate: new Date().toISOString(),
@@ -86,23 +69,6 @@ const SettingsScreen: React.FC = () => {
     } catch (error) {
       Alert.alert("Erro", "Ocorreu um erro ao exportar os dados.")
       console.error("Export error:", error)
-    }
-  }
-
-  const getCategoryLabel = (category: string): string => {
-    switch (category) {
-      case "MONTHLY_BILLS":
-        return "Contas Mensais"
-      case "GROCERIES":
-        return "Mercado"
-      case "LEISURE":
-        return "Lazer"
-      case "FUEL":
-        return "Gasolina"
-      case "OTHER":
-        return "Outros"
-      default:
-        return "Outros"
     }
   }
 
@@ -250,59 +216,7 @@ const SettingsScreen: React.FC = () => {
       <ScrollView style={styles.content}>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Orçamento</Text>
-
-          <View style={styles.settingItem}>
-            <Text style={styles.settingLabel}>Orçamento Mensal</Text>
-            {editingBudget ? (
-              <View style={styles.budgetContainer}>
-                <TextInput
-                  style={styles.budgetInput}
-                  value={budgetValue}
-                  onChangeText={setBudgetValue}
-                  keyboardType="numeric"
-                  autoFocus
-                />
-                <View style={styles.buttonContainer}>
-                  <TouchableOpacity style={styles.iconButton} onPress={handleSaveBudget}>
-                    <Ionicons name="checkmark" size={24} color={colors.success} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.iconButton}
-                    onPress={() => {
-                      setBudgetValue(monthlyBudget.toString())
-                      setEditingBudget(false)
-                    }}
-                  >
-                    <Ionicons name="close" size={24} color={colors.danger} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.budgetContainer}>
-                <Text style={styles.budgetValue}>R$ {monthlyBudget.toFixed(2)}</Text>
-                {!isLocked && (
-                  <TouchableOpacity style={styles.iconButton} onPress={() => setEditingBudget(true)}>
-                    <Ionicons name="create-outline" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Aplicativo</Text>
-
-          <View style={styles.settingItem}>
-            <Text style={styles.settingLabel}>Bloquear Edições</Text>
-            <Switch
-              value={isLocked}
-              onValueChange={toggleLock}
-              trackColor={{ false: colors.border, true: colors.primary + "80" }}
-              thumbColor={isLocked ? colors.primary : "#f4f3f4"}
-            />
-          </View>
 
           <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
             <Text style={styles.settingLabel}>Tema</Text>
@@ -347,3 +261,4 @@ const SettingsScreen: React.FC = () => {
 }
 
 export default SettingsScreen
+

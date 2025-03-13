@@ -70,7 +70,7 @@ const AppNavigator = () => {
           },
         })}
       >
-        <Tab.Screen name="Home" component={HomeScreen} options={{ title: customTabNames.home }} />
+        <Tab.Screen name="Home" component={HomeScreen} options={{ title: "Início"}} />
         <Tab.Screen name="Expenses" component={ExpensesScreen} options={{ title: "Despesas" }} />
         <Tab.Screen name="Analytics" component={AnalyticsScreen} options={{ title: customTabNames.analytics }} />
         <Tab.Screen name="Settings" component={SettingsStack} options={{ title: customTabNames.settings }} />

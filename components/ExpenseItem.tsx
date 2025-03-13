@@ -1,3 +1,5 @@
+"use client"
+
 import type React from "react"
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
@@ -13,7 +15,24 @@ interface ExpenseItemProps {
 
 const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, onTogglePaid }) => {
   const { colors } = useTheme()
-  const { isLocked, getExpenseStatus } = useFinance()
+  const { isLocked, getExpenseStatus, currentMonth } = useFinance()
+
+  const getAdjustedDueDate = (dueDate: string, currentMonth: string) => {
+    const [year, month, day] = dueDate.split("-").map(Number)
+    return `${currentMonth}-${day.toString().padStart(2, "0")}`
+  }  
+
+  // Get the adjusted due date for fixed expenses
+  const adjustedDueDate =
+    expense.isFixed && expense.dueDate ? getAdjustedDueDate(expense.dueDate, currentMonth) : expense.dueDate
+
+  // Obter o status da despesa usando a data ajustada
+  const expenseStatus = expense.isFixed
+    ? getExpenseStatus({
+        ...expense,
+        dueDate: adjustedDueDate,
+      })
+    : null
 
   const getCategoryLabel = (category: Category): string => {
     switch (category) {
@@ -80,7 +99,7 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
   }
 
   // Obter o status da despesa
-  const expenseStatus = expense.isFixed ? getExpenseStatus(expense) : null
+  // const expenseStatus = expense.isFixed ? getExpenseStatus(expense) : null
 
   // Definir ícone e cor com base no status
   const getStatusIcon = () => {
@@ -221,11 +240,11 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
       </View>
 
       {/* Informações de vencimento e status para despesas fixas */}
-      {expense.isFixed && expense.dueDate && (
+      {expense.isFixed && adjustedDueDate && (
         <View style={[styles.details, { marginTop: 4 }]}>
           <View style={styles.detailItem}>
             <Ionicons name="alarm-outline" size={16} color={colors.text + "99"} />
-            <Text style={styles.detailText}>Vence em: {expense.dueDate}</Text>
+            <Text style={styles.detailText}>Vence em: {adjustedDueDate}</Text>
           </View>
 
           {!isLocked && onTogglePaid ? (
@@ -279,4 +298,3 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
 }
 
 export default ExpenseItem
-

@@ -98,49 +98,6 @@ const PaymentMethodChart: React.FC = () => {
       </View>
     )
   }
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Gastos por Forma de Pagamento</Text>
-      <BarChart
-        data={chartData}
-        width={Dimensions.get("window").width - 64}
-        height={220}
-        yAxisLabel="R$"
-        chartConfig={{
-          backgroundColor: colors.background,
-          backgroundGradientFrom: colors.background,
-          backgroundGradientTo: colors.background,
-          decimalPlaces: 0,
-          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-          labelColor: (opacity = 1) => (isDarkMode ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`),
-          style: {
-            borderRadius: 16,
-          },
-          barPercentage: 0.7,
-        }}
-        style={{
-          marginVertical: 8,
-          borderRadius: 16,
-        }}
-        fromZero
-      />
-
-      {/* Adicionar legenda com cores */}
-      <View style={styles.legendContainer}>
-        {Object.entries(expensesByPaymentMethod).map(
-          ([method, amount], index) =>
-            amount > 0 && (
-              <View key={method} style={styles.legendItem}>
-                <View style={[styles.legendColor, { backgroundColor: paymentMethodColors[method as PaymentMethod] }]} />
-                <Text style={styles.legendText}>{getPaymentMethodLabel(method as PaymentMethod)}</Text>
-                <Text style={styles.legendAmount}>R$ {amount.toFixed(2)}</Text>
-              </View>
-            ),
-        )}
-      </View>
-    </View>
-  )
 }
 
 export default PaymentMethodChart

@@ -497,56 +497,6 @@ const HomeScreen: React.FC = () => {
             label="Progresso do Orçamento"
           />
         </View>
-
-        {/* Seção de Categorias Principais */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Categorias Principais</Text>
-          <TouchableOpacity style={styles.filterButton} onPress={navigateToCategories}>
-            <Ionicons name="options" size={16} color={colors.text} />
-            <Text style={styles.filterText}>Gerenciar</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.card}>
-          {topCategories.length > 0 ? (
-            <>
-              {topCategories.map((category) => {
-                const budget = getCategoryBudget(category.id)
-                const spent = getCategorySpent(category.id)
-                const remaining = getCategoryRemaining(category.id)
-
-                return (
-                  <View key={category.id} style={styles.categoryProgressContainer}>
-                    <View style={styles.categoryHeader}>
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        <View style={[styles.categoryColorIndicator, { backgroundColor: category.color }]} />
-                        <Text style={styles.categoryTitle}>{category.name}</Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.categoryBudgetText,
-                          { fontWeight: "bold", color: remaining >= 0 ? colors.success : colors.danger },
-                        ]}
-                      >
-                        R$ {remaining.toFixed(2)}
-                      </Text>
-                    </View>
-
-                    <BudgetProgressBar current={spent} total={budget} />
-                  </View>
-                )
-              })}
-
-              <TouchableOpacity style={styles.viewAllButton} onPress={navigateToCategories}>
-                <Text style={styles.viewAllText}>Ver todas as categorias</Text>
-                <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <Text style={styles.noExpensesText}>Nenhuma categoria com gastos encontrada.</Text>
-          )}
-        </View>
-
         {/* Seção de Despesas Fixas */}
         <View style={styles.sectionHeaderFixed}>
           <Text style={styles.sectionTitle}>Despesas Fixas</Text>
@@ -619,6 +569,55 @@ const HomeScreen: React.FC = () => {
               {fixedExpensesFilter === "PENDING" ? "pendente" : fixedExpensesFilter === "OVERDUE" ? "atrasada" : "paga"}{" "}
               encontrada.
             </Text>
+          )}
+        </View>
+
+        {/* Seção de Categorias Principais */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Categorias Principais</Text>
+          <TouchableOpacity style={styles.filterButton} onPress={navigateToCategories}>
+            <Ionicons name="options" size={16} color={colors.text} />
+            <Text style={styles.filterText}>Gerenciar</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          {topCategories.length > 0 ? (
+            <>
+              {topCategories.map((category) => {
+                const budget = getCategoryBudget(category.id)
+                const spent = getCategorySpent(category.id)
+                const remaining = getCategoryRemaining(category.id)
+
+                return (
+                  <View key={category.id} style={styles.categoryProgressContainer}>
+                    <View style={styles.categoryHeader}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <View style={[styles.categoryColorIndicator, { backgroundColor: category.color }]} />
+                        <Text style={styles.categoryTitle}>{category.name}</Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.categoryBudgetText,
+                          { fontWeight: "bold", color: remaining >= 0 ? colors.success : colors.danger },
+                        ]}
+                      >
+                        R$ {remaining.toFixed(2)}
+                      </Text>
+                    </View>
+
+                    <BudgetProgressBar current={spent} total={budget} />
+                  </View>
+                )
+              })}
+
+              <TouchableOpacity style={styles.viewAllButton} onPress={navigateToCategories}>
+                <Text style={styles.viewAllText}>Ver todas as categorias</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.noExpensesText}>Nenhuma categoria com gastos encontrada.</Text>
           )}
         </View>
 

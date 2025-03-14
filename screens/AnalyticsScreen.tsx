@@ -156,8 +156,6 @@ const AnalyticsScreen: React.FC = () => {
 
         <CategoryChart />
 
-        <PaymentMethodChart />
-
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Progresso por Categoria</Text>
 

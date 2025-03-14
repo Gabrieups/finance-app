@@ -1,11 +1,14 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native"
+import { useState, useEffect, useRef } from "react"
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Animated, Platform } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { type Category, type PaymentMethod, useFinance } from "../context/FinanceContext"
 import { Ionicons } from "@expo/vector-icons"
+import DateTimePicker from "@react-native-community/datetimepicker"
+import PriceInput from "./PriceInput"
+import Linha from "./ui/Line"
 
 interface ExpenseFormProps {
   initialValues?: {
@@ -18,7 +21,6 @@ interface ExpenseFormProps {
     dueDate?: string
     isPaid?: boolean
     isFixed?: boolean
-    isRecurring?: boolean
   }
   onSubmit: (values: any) => void
   onCancel: () => void
@@ -34,7 +36,6 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     date: new Date().toISOString().split("T")[0],
     dueDate: new Date().toISOString().split("T")[0],
     isPaid: false,
-    isRecurring: false,
   },
   onSubmit,
   onCancel,
@@ -47,12 +48,17 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   const [amount, setAmount] = useState(initialValues.amount)
   const [category, setCategory] = useState<Category>(initialValues.category)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialValues.paymentMethod)
-  const [date, setDate] = useState(initialValues.date || new Date().toISOString().split("T")[0])
-  const [dueDate, setDueDate] = useState(initialValues.dueDate || new Date().toISOString().split("T")[0])
+
+  // Date state management
+  const [date, setDate] = useState(initialValues.date ? new Date(initialValues.date) : new Date())
+  const [dueDate, setDueDate] = useState(initialValues.dueDate ? new Date(initialValues.dueDate) : new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false)
+  const [datePickerMode, setDatePickerMode] = useState<"date" | "time">("date")
+
   const [isPaid, setIsPaid] = useState(initialValues.isPaid || false)
   const [isFixedExpense, setIsFixedExpense] = useState(!isVariable)
 
-  // Estado para controlar erros de validação
   const [errors, setErrors] = useState({
     name: false,
     amount: false,
@@ -61,28 +67,65 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     date: false,
     dueDate: false,
   })
+  
 
-  // Formatar a data para exibição
-  const formatDateForDisplay = (dateString: string): string => {
-    const [year, month, day] = dateString.split("-")
-    return `${day}/${month}/${year}`
+  const shakeAnimation = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (Object.values(errors).some((e) => e)) {
+      startShakeAnimation()
+    }
+  }, [errors])
+
+  const startShakeAnimation = () => {
+    shakeAnimation.setValue(0)
+    
+    Animated.sequence([
+      Animated.timing(shakeAnimation, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: 8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: -8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: 5, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: -5, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnimation, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start()
   }
 
-  // Formatar a data para armazenamento
-  const formatDateForStorage = (dateString: string): string => {
-    // Se já estiver no formato YYYY-MM-DD, retornar como está
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      return dateString
+  // Format date for display
+  const formatDateForDisplay = (date: Date): string => {
+    return `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1).toString().padStart(2, "0")}/${date.getFullYear()}`
+  }
+
+  // Format date for storage
+  const formatDateForStorage = (date: Date): string => {
+    return date.toISOString().split("T")[0]
+  }
+
+  // Handle date change
+  const onDateChange = (event, selectedDate) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false)
     }
 
-    // Se estiver no formato DD/MM/YYYY, converter para YYYY-MM-DD
-    const [day, month, year] = dateString.split("/")
-    return `${year}-${month}-${day}`
+    if (selectedDate) {
+      setDate(selectedDate)
+    }
+  }
+
+  // Handle due date change
+  const onDueDateChange = (event, selectedDate) => {
+    if (Platform.OS === "android") {
+      setShowDueDatePicker(false)
+    }
+
+    if (selectedDate) {
+      setDueDate(selectedDate)
+    }
   }
 
   const validateForm = () => {
     const newErrors = {
-      name: !name,
+      name: false, // Name is no longer required
       amount: !amount || isNaN(Number(amount)) || Number(amount) <= 0,
       category: !category,
       paymentMethod: !paymentMethod,
@@ -99,24 +142,26 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     if (isLocked) return
 
     if (!validateForm()) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios corretamente.")
       return
     }
 
+    // Get the category name to use as default if no name is provided
+    const categoryObj = customCategories.find((cat) => cat.id === category)
+    const categoryName = categoryObj ? categoryObj.name : ""
+
     const expenseData = {
       id: initialValues.id,
-      name,
+      name: name || categoryName, // Use category name if no name is provided
       amount: Number.parseFloat(amount) || 0,
       category,
       paymentMethod,
-      date,
+      date: formatDateForStorage(date),
       isFixed: isFixedExpense,
       // Incluir dueDate e isPaid apenas para despesas fixas
       ...(isFixedExpense
         ? {
             dueDate: formatDateForStorage(dueDate),
             isPaid,
-            isRecurring: initialValues.isRecurring || false,
           }
         : {}),
     }
@@ -130,18 +175,23 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       backgroundColor: colors.card,
       borderRadius: 8,
     },
+    header:{
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 13,
+      justifyContent: "space-between"
+    },
     title: {
-      fontSize: 18,
+      fontSize: 14,
       fontWeight: "bold",
-      marginBottom: 16,
       color: colors.text,
     },
     inputGroup: {
-      marginBottom: 16,
+      marginBottom: 13,
     },
     label: {
       fontSize: 16,
-      marginBottom: 8,
       color: colors.text,
     },
     input: {
@@ -159,7 +209,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     errorText: {
       color: colors.danger,
       fontSize: 12,
-      marginTop: 4,
+    },
+    errorTextValue: {
+      color: colors.danger,
+      fontSize: 12,
+      alignSelf: "flex-end",
+      position: "absolute"
     },
     pickerContainer: {
       backgroundColor: colors.background,
@@ -171,8 +226,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     buttonContainer: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginTop: 6,
-      marginBottom: 30
+      marginTop: 16,
     },
     button: {
       padding: 12,
@@ -183,9 +237,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     },
     submitButton: {
       backgroundColor: colors.primary,
-    },
-    cancelButton: {
-      backgroundColor: colors.danger,
+      padding: 7,
+      borderRadius: 4,
+      alignItems: "center",
+      flex: 1,
     },
     buttonText: {
       color: "#FFFFFF",
@@ -221,7 +276,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     checkboxContainer: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 16,
+      marginVertical: 5,
     },
     checkbox: {
       width: 24,
@@ -246,7 +301,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       flexDirection: "row",
       alignItems: "center",
       width: "48%",
-      marginBottom: 12,
+      marginBottom: 8,
     },
     paymentMethodCheckbox: {
       width: 24,
@@ -275,7 +330,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
       flexDirection: "row",
       alignItems: "center",
       width: "48%",
-      marginBottom: 12,
+      marginBottom: 10,
     },
     categoryCheckbox: {
       width: 24,
@@ -295,6 +350,21 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     },
     categoryLabel: {
       fontSize: 14,
+      color: colors.text,
+    },
+    dateButton: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 4,
+      padding: 6,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginLeft: 6,
+      width: "40%"
+    },
+    dateButtonText: {
       color: colors.text,
     },
   })
@@ -318,34 +388,35 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
   return (
     <ScrollView style={styles.container}>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Valor (R$)</Text>
-        <TextInput
-          style={[styles.input, errors.amount && styles.inputError]}
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="numeric"
-          placeholder="0.00"
-          placeholderTextColor={colors.text + "80"}
-        />
-        {errors.amount && <Text style={styles.errorText}>Valor válido é obrigatório</Text>}
+      <View style={styles.header}>
+        <Text style={styles.title}>
+          {initialValues.id ? "Editar Despesa" : isFixedExpense ? "Nova Despesa Fixa" : "Nova Despesa Variável"}
+        </Text>
+        <TouchableOpacity onPress={onCancel}>
+          <Ionicons name="close" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Descrição</Text>
+        <Animated.View style={{transform: [{translateX: shakeAnimation}]}}>
+          {errors.amount && <Text style={styles.errorTextValue}>Campo obrigatório</Text>}
+          <PriceInput value={amount} onChangeText={setAmount} error={errors.amount} />
+        </Animated.View>
         <TextInput
-          style={[styles.input, errors.name && styles.inputError]}
+          style={{alignSelf: "center", color: colors.text}}
           value={name}
           onChangeText={setName}
-          placeholder="Nome da despesa"
+          placeholder="Descrição da despesa (opcional)"
           placeholderTextColor={colors.text + "80"}
         />
-        {errors.name && <Text style={styles.errorText}>Descrição é obrigatório</Text>}
+        <Linha />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Categoria</Text>
+        <Animated.View style={{flexDirection: "row", alignItems: "center", justifyContent: "space-between", transform: [{translateX: shakeAnimation}]}}>
+          <Text style={[styles.label, {color: errors.amount ? colors.danger : colors.text}]}>Categoria</Text>
+          {errors.category && <Text style={styles.errorText}>Campo obrigatório</Text>}
+        </Animated.View>
         <View style={styles.categoryContainer}>
           <View style={styles.categoryRow}>
             {customCategories.map((cat) => (
@@ -359,11 +430,13 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
             ))}
           </View>
         </View>
-        {errors.category && <Text style={styles.errorText}>Categoria é obrigatória</Text>}
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Forma de Pagamento</Text>
+        <Animated.View style={{flexDirection: "row", alignItems: "center", justifyContent: "space-between", transform: [{translateX: shakeAnimation}]}}>
+          <Text style={[styles.label, {color: errors.amount ? colors.danger : colors.text}]}>Forma de Pagamento</Text>
+          {errors.paymentMethod && <Text style={styles.errorText}>Campo obrigatória</Text>}
+        </Animated.View>
         <View style={styles.paymentMethodsContainer}>
           <View style={styles.paymentMethodRow}>
             <TouchableOpacity style={styles.paymentMethodItem} onPress={() => setPaymentMethod("PIX")}>
@@ -395,60 +468,56 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-        {errors.paymentMethod && <Text style={styles.errorText}>Forma de pagamento é obrigatória</Text>}
       </View>
-
       {!isFixedExpense && (
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Data</Text>
-          <View style={styles.dateInputContainer}>
-            <TextInput
-              style={[styles.dateInput, errors.date && styles.inputError]}
-              value={date}
-              onChangeText={setDate}
-              placeholder="DD/MM/AAAA"
-              placeholderTextColor={colors.text + "80"}
-            />
-            <Ionicons name="calendar-outline" size={20} color={colors.text + "80"} style={styles.dateIcon} />
+          <View style={{flexDirection: "row", alignItems: "center"}}>
+            <Text style={styles.label}>Data da compra: </Text>
+            <TouchableOpacity
+              style={[styles.dateButton, errors.date && styles.inputError]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors.text + "80"} />
+              <Text style={styles.dateButtonText}>{formatDateForDisplay(date)}</Text>
+            </TouchableOpacity>
+            {errors.date && <Text style={styles.errorText}>Data é obrigatória</Text>}
+
+            {showDatePicker && <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />}
           </View>
-          {errors.date && <Text style={styles.errorText}>Data é obrigatória</Text>}
         </View>
       )}
 
       {isFixedExpense && (
         <>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Data de Vencimento</Text>
-            <View style={styles.dateInputContainer}>
-              <TextInput
-                style={[styles.dateInput, errors.dueDate && styles.inputError]}
-                value={dueDate}
-                onChangeText={setDueDate}
-                placeholder="DD/MM/AAAA"
-                placeholderTextColor={colors.text + "80"}
-              />
-              <Ionicons name="calendar-outline" size={20} color={colors.text + "80"} style={styles.dateIcon} />
-            </View>
-            {errors.dueDate && <Text style={styles.errorText}>Data de vencimento é obrigatória</Text>}
-          </View>
+          <View style={[styles.inputGroup]}>
+            <View style={{flexDirection: "row", alignItems: "center"}}>
+              <Text style={styles.label}>Data de Vencimento: </Text>
+              <TouchableOpacity
+                style={[styles.dateButton, errors.dueDate && styles.inputError]}
+                onPress={() => setShowDueDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={20} color={colors.text + "80"} />
+                <Text style={styles.dateButtonText}>{formatDateForDisplay(dueDate)}</Text>
+              </TouchableOpacity>
+              {errors.dueDate && <Text style={styles.errorText}>Data de vencimento é obrigatória</Text>}
 
-          <View style={styles.checkboxContainer}>
-            <TouchableOpacity style={styles.checkbox} onPress={() => setIsPaid(!isPaid)}>
-              {isPaid && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-            </TouchableOpacity>
-            <Text style={styles.label}>Marcado como Pago</Text>
+              {showDueDatePicker && (
+                <DateTimePicker value={dueDate} mode="date" display="default" onChange={onDueDateChange} />
+              )}
+            </View>
+
+            <View style={styles.checkboxContainer}>
+              <TouchableOpacity style={styles.checkbox} onPress={() => setIsPaid(!isPaid)}>
+                {isPaid && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+              </TouchableOpacity>
+              <Text style={styles.label}>Marcado como Pago</Text>
+            </View>
           </View>
         </>
       )}
-
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={onCancel}>
-          <Text style={styles.buttonText}>Cancelar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.submitButton]} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>Salvar</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+        <Ionicons name="checkmark-outline" size={24} color="#FFFFFF" />
+      </TouchableOpacity>
     </ScrollView>
   )
 }

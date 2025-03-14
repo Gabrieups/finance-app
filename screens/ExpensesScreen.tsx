@@ -4,12 +4,15 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, Modal } from "react-native"
 import { useTheme } from "../context/ThemeContext"
-import { useFinance } from "../context/FinanceContext"
+import { useFinance, type ExpenseStatus } from "../context/FinanceContext"
 import ExpenseItem from "../components/ExpenseItem"
 import ExpenseForm from "../components/ExpenseForm"
 import { Ionicons } from "@expo/vector-icons"
+import MonthNavigator from "../components/MonthNavigator"
 
-type FilterType = "ALL" | "FIXED" | "VARIABLE"
+type TabType = "FIXED" | "VARIABLE"
+type SortType = "DATE" | "NAME" | "AMOUNT"
+type SortDirection = "ASC" | "DESC"
 
 const ExpensesScreen: React.FC = () => {
   const { colors } = useTheme()
@@ -23,55 +26,96 @@ const ExpensesScreen: React.FC = () => {
     deleteFixedExpense,
     deleteVariableExpense,
     isLocked,
+    currentMonth,
+    monthlyHistory,
+    isDateInMonth,
+    getExpenseStatus,
+    getFixedExpensesForMonth,
+    setExpensePaymentStatus,
   } = useFinance()
 
   const [showForm, setShowForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState<any>(null)
-  const [filterType, setFilterType] = useState<FilterType>("ALL")
   const [searchQuery, setSearchQuery] = useState("")
-  const [showFilterModal, setShowFilterModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabType>("FIXED")
+  const [sortType, setSortType] = useState<SortType>("DATE")
+  const [sortDirection, setSortDirection] = useState<SortDirection>("DESC")
+  const [showSortModal, setShowSortModal] = useState(false)
+  const [showStatusFilterModal, setShowStatusFilterModal] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<ExpenseStatus | "ALL">("ALL")
   const [isVariable, setIsVariable] = useState(false)
   const [filteredExpensesState, setFilteredExpensesState] = useState([])
 
-  // Combinar as despesas fixas e variáveis
-  const allExpenses = [...fixedExpenses, ...variableExpenses]
+  // Check if we're viewing the current month or historical data
+  const today = new Date()
+  const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
+  const isViewingCurrentMonth = currentMonth === currentMonthKey
 
   useEffect(() => {
-    // Filtrar despesas com base no tipo e na busca
-    const filtered = allExpenses.filter((expense) => {
-      // Filtrar por tipo
-      if (filterType === "FIXED" && !expense.isFixed) return false
-      if (filterType === "VARIABLE" && expense.isFixed) return false
+    // Filter expenses based on the active tab, search query, and current month
+    let filtered = []
 
-      // Filtrar por busca
-      if (searchQuery && !expense.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
+    if (activeTab === "FIXED") {
+      // Get fixed expenses for the current viewing month
+      const fixedExpensesForMonth = getFixedExpensesForMonth(currentMonth)
 
-      return true
-    })
+      filtered = fixedExpensesForMonth.filter((expense) => {
+        // Filter by status if a status filter is active
+        if (statusFilter !== "ALL") {
+          const expenseStatus = getExpenseStatus(expense)
+          if (expenseStatus !== statusFilter) return false
+        }
 
-    // Ordenar despesas por data (mais recentes primeiro)
+        // Filter by search query
+        if (searchQuery && !expense.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
+
+        return true
+      })
+    } else {
+      filtered = variableExpenses.filter((expense) => {
+        // Only show variable expenses for the current viewing month
+        if (!expense.date || !isDateInMonth(expense.date, currentMonth)) return false
+
+        // Filter by search query
+        if (searchQuery && !expense.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
+
+        return true
+      })
+    }
+
+    // Sort the filtered expenses
     const sorted = [...filtered].sort((a, b) => {
-      const dateA = a.isFixed ? a.dueDate || "" : a.date
-      const dateB = b.isFixed ? b.dueDate || "" : b.date
-      return new Date(dateB).getTime() - new Date(dateA).getTime()
+      if (sortType === "DATE") {
+        const dateA = a.isFixed ? a.dueDate || "" : a.date
+        const dateB = b.isFixed ? b.dueDate || "" : b.date
+        return sortDirection === "ASC"
+          ? new Date(dateA).getTime() - new Date(dateB).getTime()
+          : new Date(dateB).getTime() - new Date(dateA).getTime()
+      } else if (sortType === "NAME") {
+        return sortDirection === "ASC" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+      } else if (sortType === "AMOUNT") {
+        return sortDirection === "ASC" ? a.amount - b.amount : b.amount - a.amount
+      }
+      return 0
     })
 
     setFilteredExpensesState(sorted)
-  }, [fixedExpenses, variableExpenses, filterType, searchQuery])
+  }, [
+    activeTab,
+    searchQuery,
+    sortType,
+    sortDirection,
+    statusFilter,
+    fixedExpenses,
+    variableExpenses,
+    currentMonth,
+    getFixedExpensesForMonth,
+  ])
 
-  // Função para adicionar despesa variável
-  const handleAddVariableExpense = () => {
+  const handleAddExpense = () => {
     if (isLocked) return
     setEditingExpense(null)
-    setIsVariable(true)
-    setShowForm(true)
-  }
-
-  // Função para adicionar despesa fixa
-  const handleAddFixedExpense = () => {
-    if (isLocked) return
-    setEditingExpense(null)
-    setIsVariable(false)
+    setIsVariable(activeTab === "VARIABLE")
     setShowForm(true)
   }
 
@@ -91,14 +135,17 @@ const ExpensesScreen: React.FC = () => {
         style: "destructive",
         onPress: () => {
           if (expense.isFixed) {
-            deleteFixedExpense(expense.id)
+            // If this is a recurring expense (has an underscore in the ID)
+            if (expense.id.includes("_")) {
+              // Extract the original ID
+              const originalId = expense.id.split("_")[0]
+              deleteFixedExpense(originalId)
+            } else {
+              deleteFixedExpense(expense.id)
+            }
           } else {
             deleteVariableExpense(expense.id)
           }
-
-          // Forçar atualização da lista
-          const updatedExpenses = filteredExpensesState.filter((item) => item.id !== expense.id)
-          setFilteredExpensesState(updatedExpenses)
         },
       },
     ])
@@ -115,10 +162,26 @@ const ExpensesScreen: React.FC = () => {
         addVariableExpense(expense)
       }
     } else {
-      if (expense.isFixed) {
-        updateFixedExpense(expense)
+      // If we're editing a recurring expense (has an underscore in the ID)
+      if (expense.id.includes("_")) {
+        // Extract the original ID
+        const originalId = expense.id.split("_")[0]
+        // Update the expense with the original ID
+        const originalExpense = fixedExpenses.find((e) => e.id === originalId)
+        if (originalExpense) {
+          // Update with the original ID but keep the new values
+          updateFixedExpense({
+            ...expense,
+            id: originalId,
+          })
+        }
       } else {
-        updateVariableExpense(expense)
+        // Regular update
+        if (expense.isFixed) {
+          updateFixedExpense(expense)
+        } else {
+          updateVariableExpense(expense)
+        }
       }
     }
     setShowForm(false)
@@ -126,21 +189,40 @@ const ExpensesScreen: React.FC = () => {
 
   const handleTogglePaid = (expense) => {
     if (isLocked || !expense.isFixed) return
-    const updatedExpense = {
-      ...expense,
-      isPaid: !expense.isPaid,
+
+    // If this is a recurring expense (has an underscore in the ID)
+    if (expense.id.includes("_")) {
+      // Extract the original ID
+      const originalId = expense.id.split("_")[0]
+
+      // Update the payment status for this specific month
+      setExpensePaymentStatus(originalId, currentMonth, !expense.isPaid)
+    } else {
+      // For the original month, update the expense directly
+      const updatedExpense = {
+        ...expense,
+        isPaid: !expense.isPaid,
+      }
+      updateFixedExpense(updatedExpense)
     }
-    updateFixedExpense(updatedExpense)
   }
 
-  const getFilterLabel = (filter: FilterType): string => {
-    switch (filter) {
-      case "ALL":
-        return "Todas"
-      case "FIXED":
-        return "Fixas"
-      case "VARIABLE":
-        return "Variáveis"
+  const toggleSortDirection = () => {
+    setSortDirection(sortDirection === "ASC" ? "DESC" : "ASC")
+  }
+
+  const getSortIcon = () => {
+    return sortDirection === "ASC" ? "arrow-up" : "arrow-down"
+  }
+
+  const getStatusFilterLabel = () => {
+    switch (statusFilter) {
+      case "PAID":
+        return "Pagas"
+      case "PENDING":
+        return "Pendentes"
+      case "OVERDUE":
+        return "Atrasadas"
       default:
         return "Todas"
     }
@@ -174,7 +256,29 @@ const ExpensesScreen: React.FC = () => {
       color: colors.text,
       fontSize: 16,
     },
-    filterContainer: {
+    tabsContainer: {
+      flexDirection: "row",
+      marginBottom: 16,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 12,
+      alignItems: "center",
+      borderBottomWidth: 2,
+      borderBottomColor: "transparent",
+    },
+    activeTab: {
+      borderBottomColor: colors.primary,
+    },
+    tabText: {
+      fontSize: 16,
+      color: colors.text + "99",
+    },
+    activeTabText: {
+      color: colors.primary,
+      fontWeight: "bold",
+    },
+    filterRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       marginBottom: 16,
@@ -186,12 +290,12 @@ const ExpensesScreen: React.FC = () => {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 8,
+      marginRight: 8,
     },
     filterText: {
       color: colors.text,
       marginLeft: 4,
     },
-    // Estilo para os botões de adicionar
     addButton: {
       flex: 1,
       backgroundColor: colors.primary,
@@ -205,8 +309,8 @@ const ExpensesScreen: React.FC = () => {
     },
     addButtonText: {
       color: "#FFFFFF",
-      marginLeft: 4,
-    },
+      marginLeft: 4,
+    },
     listContainer: {
       padding: 16,
       paddingTop: 0,
@@ -252,7 +356,7 @@ const ExpensesScreen: React.FC = () => {
       color: colors.text,
       marginBottom: 16,
     },
-    filterOption: {
+    sortOption: {
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: 12,
@@ -262,7 +366,7 @@ const ExpensesScreen: React.FC = () => {
     lastOption: {
       borderBottomWidth: 0,
     },
-    filterOptionText: {
+    sortOptionText: {
       fontSize: 16,
       color: colors.text,
       marginLeft: 12,
@@ -282,30 +386,37 @@ const ExpensesScreen: React.FC = () => {
       color: colors.text,
       fontWeight: "bold",
     },
-    typeTag: {
-      position: "absolute",
-      bottom: 25 ,
-      left: 15,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 4,
-      zIndex: 1,
+    historicalDataBanner: {
+      backgroundColor: colors.warning + "30",
+      padding: 8,
+      borderRadius: 8,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
     },
-    fixedTag: {
-      backgroundColor: colors.primary + "40",
-    },
-    variableTag: {
-      backgroundColor: colors.warning + "40",
-    },
-    typeTagText: {
-      fontSize: 12,
-      fontWeight: "bold",
-    },
-    fixedTagText: {
-      color: colors.primary,
-    },
-    variableTagText: {
+    historicalDataText: {
       color: colors.warning,
+      marginLeft: 8,
+      flex: 1,
+    },
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    futureMonthBanner: {
+      backgroundColor: colors.warning + "20",
+      padding: 8,
+      borderRadius: 8,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    futureMonthText: {
+      color: colors.warning,
+      marginLeft: 8,
+      flex: 1,
     },
   })
 
@@ -325,11 +436,55 @@ const ExpensesScreen: React.FC = () => {
     )
   }
 
+  // Check if the month is in the future
+  const isFutureMonth = () => {
+    const [year, month] = currentMonth.split("-").map(Number)
+    const currentDate = new Date()
+    const viewingDate = new Date(year, month - 1, 1)
+    return viewingDate > currentDate
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "FIXED" && styles.activeTab]}
+            onPress={() => setActiveTab("FIXED")}
+          >
+            <Text style={[styles.tabText, activeTab === "FIXED" && styles.activeTabText]}>Despesas Fixas</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "VARIABLE" && styles.activeTab]}
+            onPress={() => setActiveTab("VARIABLE")}
+          >
+            <Text style={[styles.tabText, activeTab === "VARIABLE" && styles.activeTabText]}>Despesas Variáveis</Text>
+          </TouchableOpacity>
+        </View>
+        <MonthNavigator />
 
-        {/* Barra de pesquisa */}
+        {/* Banner for historical data */}
+        {!isViewingCurrentMonth && !isFutureMonth() && (
+          <View style={styles.historicalDataBanner}>
+            <Ionicons name="information-circle" size={20} color={colors.warning} />
+            <Text style={styles.historicalDataText}>
+              Você está visualizando dados históricos. Algumas ações estão desabilitadas.
+            </Text>
+          </View>
+        )}
+
+        {/* Banner for future months */}
+        {isFutureMonth() && (
+          <View style={styles.futureMonthBanner}>
+            <Ionicons name="calendar" size={20} color={colors.warning} />
+            <Text style={styles.futureMonthText}>
+              Você está visualizando um mês futuro. Adicione despesas fixas com antecedência.
+            </Text>
+          </View>
+        )}
+
+        {/* Search bar */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color={colors.text + "80"} />
           <TextInput
@@ -346,22 +501,34 @@ const ExpensesScreen: React.FC = () => {
           ) : null}
         </View>
 
-        {/* Filtros */}
-        <View style={styles.filterContainer}>
-          <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilterModal(true)}>
-            <Ionicons name="filter" size={20} color={colors.text} />
-            <Text style={styles.filterText}>{getFilterLabel(filterType)}</Text>
-          </TouchableOpacity>
+        {/* Filter row */}
+        <View style={styles.filterRow}>
+          <View style={{ flexDirection: "row" }}>
+            {/* Sort button */}
+            <TouchableOpacity style={styles.filterButton} onPress={() => setShowSortModal(true)}>
+              <Ionicons name="funnel" size={20} color={colors.text} />
+              <Text style={styles.filterText}>
+                {sortType === "DATE" ? "Data" : sortType === "NAME" ? "Nome" : "Valor"}
+              </Text>
+              <Ionicons name={getSortIcon()} size={16} color={colors.text} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
 
-          {/* Container para os dois botões de adicionar */}
-          {!isLocked && (
-            <View>
-              {/* Botão para adicionar despesa fixa */}
-              <TouchableOpacity style={styles.addButton} onPress={handleAddFixedExpense}>
-                <Ionicons name="calendar" size={20} color="#FFFFFF" />
-                <Text style={styles.addButtonText}>Nova Despesa Fixa</Text>
+            {/* Status filter button - only for fixed expenses */}
+            {activeTab === "FIXED" && (
+              <TouchableOpacity style={styles.filterButton} onPress={() => setShowStatusFilterModal(true)}>
+                <Ionicons name="options" size={20} color={colors.text} />
+                <Text style={styles.filterText}>{getStatusFilterLabel()}</Text>
               </TouchableOpacity>
-            </View>
+            )}
+          </View>
+
+          {/* Add button */}
+          {!isLocked && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddExpense}>
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>Despesa Fixa</Text>
+            </TouchableOpacity>
+
           )}
         </View>
       </View>
@@ -371,21 +538,12 @@ const ExpensesScreen: React.FC = () => {
           data={filteredExpensesState}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View>
-              {/* Tag de tipo de despesa */}
-              <View style={[styles.typeTag, item.isFixed ? styles.fixedTag : styles.variableTag]}>
-                <Text style={[styles.typeTagText, item.isFixed ? styles.fixedTagText : styles.variableTagText]}>
-                  {item.isFixed ? "Fixa" : "Variável"}
-                </Text>
-              </View>
-
-              <ExpenseItem
-                expense={item}
-                onEdit={() => handleEditExpense(item)}
-                onDelete={() => handleDeleteExpense(item)}
-                onTogglePaid={() => handleTogglePaid(item)}
-              />
-            </View>
+            <ExpenseItem
+              expense={item}
+              onEdit={() => handleEditExpense(item)}
+              onDelete={() => handleDeleteExpense(item)}
+              onTogglePaid={() => handleTogglePaid(item)}
+            />
           )}
           contentContainerStyle={styles.listContainer}
         />
@@ -393,74 +551,187 @@ const ExpensesScreen: React.FC = () => {
         <View style={styles.emptyContainer}>
           <Ionicons name="receipt-outline" size={64} color={colors.text + "40"} />
           <Text style={styles.emptyText}>
-            Nenhuma despesa encontrada. {!isLocked ? "Toque em um dos botões para adicionar." : ""}
+            Nenhuma despesa {activeTab === "FIXED" ? "fixa" : "variável"} encontrada para este mês.
+            {!isLocked ? " Toque no botão + para adicionar." : ""}
           </Text>
         </View>
       )}
 
-      {/* Modal de filtros */}
+      {/* Sort Modal */}
       <Modal
-        visible={showFilterModal}
+        visible={showSortModal}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowFilterModal(false)}
+        onRequestClose={() => setShowSortModal(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Filtrar Despesas</Text>
+            <Text style={styles.modalTitle}>Ordenar por</Text>
 
             <TouchableOpacity
-              style={styles.filterOption}
+              style={styles.sortOption}
               onPress={() => {
-                setFilterType("ALL")
-                setShowFilterModal(false)
+                setSortType("DATE")
+                setShowSortModal(false)
               }}
             >
               <Ionicons
-                name={filterType === "ALL" ? "radio-button-on" : "radio-button-off"}
+                name={sortType === "DATE" ? "radio-button-on" : "radio-button-off"}
                 size={24}
-                color={filterType === "ALL" ? colors.primary : colors.text}
+                color={sortType === "DATE" ? colors.primary : colors.text}
               />
-              <Text style={[styles.filterOptionText, filterType === "ALL" && styles.selectedOption]}>
-                Todas as Despesas
+              <Text style={[styles.sortOptionText, sortType === "DATE" && styles.selectedOption]}>Data</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortOption}
+              onPress={() => {
+                setSortType("NAME")
+                setShowSortModal(false)
+              }}
+            >
+              <Ionicons
+                name={sortType === "NAME" ? "radio-button-on" : "radio-button-off"}
+                size={24}
+                color={sortType === "NAME" ? colors.primary : colors.text}
+              />
+              <Text style={[styles.sortOptionText, sortType === "NAME" && styles.selectedOption]}>Nome</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sortOption, styles.lastOption]}
+              onPress={() => {
+                setSortType("AMOUNT")
+                setShowSortModal(false)
+              }}
+            >
+              <Ionicons
+                name={sortType === "AMOUNT" ? "radio-button-on" : "radio-button-off"}
+                size={24}
+                color={sortType === "AMOUNT" ? colors.primary : colors.text}
+              />
+              <Text style={[styles.sortOptionText, sortType === "AMOUNT" && styles.selectedOption]}>Valor</Text>
+            </TouchableOpacity>
+
+            <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }}>
+              <Text style={styles.modalTitle}>Direção</Text>
+
+              <TouchableOpacity
+                style={styles.sortOption}
+                onPress={() => {
+                  setSortDirection("ASC")
+                  setShowSortModal(false)
+                }}
+              >
+                <Ionicons
+                  name={sortDirection === "ASC" ? "radio-button-on" : "radio-button-off"}
+                  size={24}
+                  color={sortDirection === "ASC" ? colors.primary : colors.text}
+                />
+                <Text style={[styles.sortOptionText, sortDirection === "ASC" && styles.selectedOption]}>Crescente</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.sortOption, styles.lastOption]}
+                onPress={() => {
+                  setSortDirection("DESC")
+                  setShowSortModal(false)
+                }}
+              >
+                <Ionicons
+                  name={sortDirection === "DESC" ? "radio-button-on" : "radio-button-off"}
+                  size={24}
+                  color={sortDirection === "DESC" ? colors.primary : colors.text}
+                />
+                <Text style={[styles.sortOptionText, sortDirection === "DESC" && styles.selectedOption]}>
+                  Decrescente
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowSortModal(false)}>
+              <Text style={styles.closeButtonText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Status Filter Modal - only for fixed expenses */}
+      <Modal
+        visible={showStatusFilterModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowStatusFilterModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Filtrar por Status</Text>
+
+            <TouchableOpacity
+              style={styles.sortOption}
+              onPress={() => {
+                setStatusFilter("ALL")
+                setShowStatusFilterModal(false)
+              }}
+            >
+              <Ionicons
+                name={statusFilter === "ALL" ? "radio-button-on" : "radio-button-off"}
+                size={24}
+                color={statusFilter === "ALL" ? colors.primary : colors.text}
+              />
+              <Text style={[styles.sortOptionText, statusFilter === "ALL" && styles.selectedOption]}>Todas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortOption}
+              onPress={() => {
+                setStatusFilter("PENDING")
+                setShowStatusFilterModal(false)
+              }}
+            >
+              <Ionicons
+                name={statusFilter === "PENDING" ? "radio-button-on" : "radio-button-off"}
+                size={24}
+                color={statusFilter === "PENDING" ? colors.primary : colors.text}
+              />
+              <Text style={[styles.sortOptionText, statusFilter === "PENDING" && styles.selectedOption]}>
+                Pendentes
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.filterOption}
+              style={styles.sortOption}
               onPress={() => {
-                setFilterType("FIXED")
-                setShowFilterModal(false)
+                setStatusFilter("PAID")
+                setShowStatusFilterModal(false)
               }}
             >
               <Ionicons
-                name={filterType === "FIXED" ? "radio-button-on" : "radio-button-off"}
+                name={statusFilter === "PAID" ? "radio-button-on" : "radio-button-off"}
                 size={24}
-                color={filterType === "FIXED" ? colors.primary : colors.text}
+                color={statusFilter === "PAID" ? colors.primary : colors.text}
               />
-              <Text style={[styles.filterOptionText, filterType === "FIXED" && styles.selectedOption]}>
-                Despesas Fixas
-              </Text>
+              <Text style={[styles.sortOptionText, statusFilter === "PAID" && styles.selectedOption]}>Pagas</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.filterOption, styles.lastOption]}
+              style={[styles.sortOption, styles.lastOption]}
               onPress={() => {
-                setFilterType("VARIABLE")
-                setShowFilterModal(false)
+                setStatusFilter("OVERDUE")
+                setShowStatusFilterModal(false)
               }}
             >
               <Ionicons
-                name={filterType === "VARIABLE" ? "radio-button-on" : "radio-button-off"}
+                name={statusFilter === "OVERDUE" ? "radio-button-on" : "radio-button-off"}
                 size={24}
-                color={filterType === "VARIABLE" ? colors.primary : colors.text}
+                color={statusFilter === "OVERDUE" ? colors.primary : colors.text}
               />
-              <Text style={[styles.filterOptionText, filterType === "VARIABLE" && styles.selectedOption]}>
-                Despesas Variáveis
+              <Text style={[styles.sortOptionText, statusFilter === "OVERDUE" && styles.selectedOption]}>
+                Atrasadas
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.closeButton} onPress={() => setShowFilterModal(false)}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowStatusFilterModal(false)}>
               <Text style={styles.closeButtonText}>Fechar</Text>
             </TouchableOpacity>
           </View>
@@ -471,4 +742,3 @@ const ExpensesScreen: React.FC = () => {
 }
 
 export default ExpensesScreen
-

@@ -4,17 +4,20 @@ import type React from "react"
 import { createContext, useState, useEffect, useContext } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
+// Define types
 export type PaymentMethod = "PIX" | "CARD" | "CASH" | "OTHER"
-export type Category = string
+export type Category = string // Alterado para string para permitir categorias personalizadas
 export type ExpenseStatus = "PAID" | "PENDING" | "OVERDUE"
 
+// Interface para representar uma categoria personalizada
 export interface CustomCategory {
   id: string
   name: string
-  budget: number
-  color: string 
+  budget: number // Orçamento alocado para esta categoria em valor monetário
+  color: string // Cor para representação visual
 }
 
+// Atualizar a interface Expense para incluir a flag isFixed
 export interface Expense {
   id: string
   name: string
@@ -25,7 +28,6 @@ export interface Expense {
   dueDate?: string
   isPaid?: boolean
   isFixed: boolean
-  isRecurring?: boolean // Nova propriedade para indicar se a despesa é recorrente
 }
 
 // Interface para armazenar dados históricos mensais
@@ -39,6 +41,13 @@ export interface MonthlyData {
   budget: number
 }
 
+// Nova interface para armazenar o status de pagamento de despesas fixas por mês
+export interface MonthlyPaymentStatus {
+  expenseId: string
+  monthYear: string // formato: YYYY-MM
+  isPaid: boolean
+}
+
 // Adicionar novas interfaces e tipos para as configurações personalizáveis
 export interface TabNames {
   home: string
@@ -48,13 +57,8 @@ export interface TabNames {
   settings: string
 }
 
-export interface CategoryBudgetPercentages {
-  [key: string]: number
-}
-
 interface FinanceContextType {
   monthlyBudget: number
-  setMonthlyBudget: (budget: number) => void
   fixedExpenses: Expense[]
   addFixedExpense: (expense: Omit<Expense, "id">) => void
   updateFixedExpense: (expense: Expense) => void
@@ -74,9 +78,6 @@ interface FinanceContextType {
   customTabNames: TabNames
   updateTabName: (tab: keyof TabNames, name: string) => void
   resetTabNames: () => void
-  categoryBudgetPercentages: CategoryBudgetPercentages
-  updateCategoryPercentage: (category: Category, percentage: number) => void
-  resetCategoryPercentages: () => void
   // Novas funções para gerenciar categorias personalizadas
   customCategories: CustomCategory[]
   addCategory: (category: Omit<CustomCategory, "id">) => string | null
@@ -95,8 +96,12 @@ interface FinanceContextType {
   currentMonth: string // formato: YYYY-MM
   setCurrentMonth: (month: string) => void
   navigateToMonth: (direction: "prev" | "next") => void
-  // Função para verificar se já existe uma despesa similar no próximo mês
-  hasSimilarExpenseNextMonth: (expense: Expense) => boolean
+  // Função para verificar se uma data está em um mês específico
+  isDateInMonth: (dateString: string, monthYear: string) => boolean
+  getFixedExpensesForMonth: (monthYear: string) => Expense[]
+  // Novas funções para gerenciar o status de pagamento por mês
+  getExpensePaymentStatus: (expenseId: string, monthYear: string) => boolean
+  setExpensePaymentStatus: (expenseId: string, monthYear: string, isPaid: boolean) => void
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined)
@@ -109,17 +114,16 @@ export const useFinance = () => {
   return context
 }
 
-// Categorias padrão
+// Categorias padrão com orçamentos em valores monetários
 const DEFAULT_CATEGORIES: CustomCategory[] = [
-  { id: "MONTHLY_BILLS", name: "Contas Mensais", budget: 0, color: "#FF6384" },
-  { id: "GROCERIES", name: "Mercado", budget: 0, color: "#36A2EB" },
-  { id: "LEISURE", name: "Lazer", budget: 0, color: "#FFCE56" },
-  { id: "FUEL", name: "Gasolina", budget: 0, color: "#4BC0C0" },
-  { id: "OTHER", name: "Outros", budget: 0, color: "#9966FF" },
+  { id: "MONTHLY_BILLS", name: "Contas Mensais", budget: 1000, color: "#FF6384" },
+  { id: "GROCERIES", name: "Mercado", budget: 500, color: "#36A2EB" },
+  { id: "LEISURE", name: "Lazer", budget: 300, color: "#FFCE56" },
+  { id: "FUEL", name: "Gasolina", budget: 200, color: "#4BC0C0" },
+  { id: "OTHER", name: "Outros", budget: 200, color: "#9966FF" },
 ]
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [monthlyBudget, setMonthlyBudget] = useState<number>(0)
   const [fixedExpenses, setFixedExpenses] = useState<Expense[]>([])
   const [variableExpenses, setVariableExpenses] = useState<Expense[]>([])
   const [isLocked, setIsLocked] = useState<boolean>(false)
@@ -132,13 +136,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     analytics: "Análise",
     settings: "Configurações",
   })
-  const [categoryBudgetPercentages, setCategoryBudgetPercentages] = useState<CategoryBudgetPercentages>({
-    MONTHLY_BILLS: 0.5,
-    GROCERIES: 0.2,
-    LEISURE: 0.1,
-    FUEL: 0.1,
-    OTHER: 0.1,
-  })
 
   // Estado para categorias personalizadas
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>(DEFAULT_CATEGORIES)
@@ -146,6 +143,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Novos estados para reset mensal e histórico
   const [resetDay, setResetDay] = useState<number>(1) // Dia 1 por padrão
   const [monthlyHistory, setMonthlyHistory] = useState<MonthlyData[]>([])
+
+  // Novo estado para armazenar o status de pagamento por mês
+  const [monthlyPaymentStatus, setMonthlyPaymentStatus] = useState<MonthlyPaymentStatus[]>([])
 
   // Estado para controlar o mês atual sendo visualizado
   const today = new Date()
@@ -157,27 +157,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const loadData = async () => {
       try {
-        const budgetData = await AsyncStorage.getItem("monthlyBudget")
         const fixedData = await AsyncStorage.getItem("fixedExpenses")
         const variableData = await AsyncStorage.getItem("variableExpenses")
         const lockedData = await AsyncStorage.getItem("isLocked")
         const syncData = await AsyncStorage.getItem("syncWithFirebase")
         const customTabNamesData = await AsyncStorage.getItem("customTabNames")
-        const categoryPercentagesData = await AsyncStorage.getItem("categoryBudgetPercentages")
         const customCategoriesData = await AsyncStorage.getItem("customCategories")
         const resetDayData = await AsyncStorage.getItem("resetDay")
         const monthlyHistoryData = await AsyncStorage.getItem("monthlyHistory")
+        const monthlyPaymentStatusData = await AsyncStorage.getItem("monthlyPaymentStatus")
 
-        if (budgetData) setMonthlyBudget(Number.parseFloat(budgetData))
         if (fixedData) setFixedExpenses(JSON.parse(fixedData))
         if (variableData) setVariableExpenses(JSON.parse(variableData))
         if (lockedData) setIsLocked(JSON.parse(lockedData))
         if (syncData) setSyncWithFirebase(JSON.parse(syncData))
         if (customTabNamesData) setCustomTabNames(JSON.parse(customTabNamesData))
-        if (categoryPercentagesData) setCategoryBudgetPercentages(JSON.parse(categoryPercentagesData))
         if (customCategoriesData) setCustomCategories(JSON.parse(customCategoriesData))
         if (resetDayData) setResetDay(Number.parseInt(resetDayData))
         if (monthlyHistoryData) setMonthlyHistory(JSON.parse(monthlyHistoryData))
+        if (monthlyPaymentStatusData) setMonthlyPaymentStatus(JSON.parse(monthlyPaymentStatusData))
       } catch (error) {
         console.error("Error loading data from AsyncStorage:", error)
       } finally {
@@ -194,16 +192,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const saveData = async () => {
       try {
-        await AsyncStorage.setItem("monthlyBudget", monthlyBudget.toString())
         await AsyncStorage.setItem("fixedExpenses", JSON.stringify(fixedExpenses))
         await AsyncStorage.setItem("variableExpenses", JSON.stringify(variableExpenses))
         await AsyncStorage.setItem("isLocked", JSON.stringify(isLocked))
         await AsyncStorage.setItem("syncWithFirebase", JSON.stringify(syncWithFirebase))
         await AsyncStorage.setItem("customTabNames", JSON.stringify(customTabNames))
-        await AsyncStorage.setItem("categoryBudgetPercentages", JSON.stringify(categoryBudgetPercentages))
         await AsyncStorage.setItem("customCategories", JSON.stringify(customCategories))
         await AsyncStorage.setItem("resetDay", resetDay.toString())
         await AsyncStorage.setItem("monthlyHistory", JSON.stringify(monthlyHistory))
+        await AsyncStorage.setItem("monthlyPaymentStatus", JSON.stringify(monthlyPaymentStatus))
       } catch (error) {
         console.error("Error saving data to AsyncStorage:", error)
       }
@@ -211,17 +208,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     saveData()
   }, [
-    monthlyBudget,
     fixedExpenses,
     variableExpenses,
     isLocked,
     syncWithFirebase,
     isLoaded,
     customTabNames,
-    categoryBudgetPercentages,
     customCategories,
     resetDay,
     monthlyHistory,
+    monthlyPaymentStatus,
   ])
 
   // Firebase sync would be implemented here
@@ -230,162 +226,123 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Firebase sync logic would go here
       console.log("Firebase sync enabled")
     }
-  }, [syncWithFirebase, fixedExpenses, variableExpenses, monthlyBudget])
+  }, [syncWithFirebase, fixedExpenses, variableExpenses, customCategories, monthlyPaymentStatus])
 
-  // Atualizar orçamentos de categorias quando o orçamento mensal mudar
-  useEffect(() => {
-    if (!isLoaded) return
+  // Função para verificar se uma data está em um mês específico
+  const isDateInMonth = (dateString: string, monthYear: string): boolean => {
+    if (!dateString || !monthYear) return false
 
-    // Atualizar o orçamento de cada categoria com base nas porcentagens
-    const updatedCategories = customCategories.map((category) => ({
-      ...category,
-      budget: monthlyBudget * (categoryBudgetPercentages[category.id] || 0),
-    }))
+    const date = new Date(dateString)
+    const [year, month] = monthYear.split("-").map(Number)
 
-    setCustomCategories(updatedCategories)
-  }, [monthlyBudget, categoryBudgetPercentages, isLoaded])
-
-  // Verificar se já existe uma despesa similar no próximo mês
-  const hasSimilarExpenseNextMonth = (expense: Expense): boolean => {
-    if (!expense.isFixed || !expense.dueDate) return false
-
-    // Obter a data de vencimento e calcular o próximo mês
-    const dueDate = new Date(expense.dueDate)
-    const nextMonth = new Date(dueDate)
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-
-    // Formatar a data do próximo mês para comparação
-    const nextMonthFormatted = nextMonth.toISOString().split("T")[0]
-
-    // Verificar se já existe uma despesa com o mesmo nome e vencimento no próximo mês
-    return fixedExpenses.some(
-      (e) =>
-        e.name === expense.name &&
-        e.amount === expense.amount &&
-        e.category === expense.category &&
-        e.dueDate &&
-        new Date(e.dueDate).getMonth() === nextMonth.getMonth() &&
-        new Date(e.dueDate).getFullYear() === nextMonth.getFullYear(),
-    )
+    return date.getMonth() + 1 === month && date.getFullYear() === year
   }
 
-  // Verificar despesas atrasadas e criar recorrências
-  useEffect(() => {
-    if (!isLoaded) return
+  // Função para obter o status de pagamento de uma despesa em um mês específico
+  const getExpensePaymentStatus = (expenseId: string, monthYear: string): boolean => {
+    // Primeiro, verificar se temos um status específico para este mês
+    const statusEntry = monthlyPaymentStatus.find(
+      (entry) => entry.expenseId === expenseId && entry.monthYear === monthYear,
+    )
 
-    // Verificar se há despesas fixas que precisam ser recriadas para o próximo mês
-    const today = new Date()
-
-    // Verificar despesas fixas pagas que precisam ser recriadas para o próximo mês
-    const updatedFixedExpenses = [...fixedExpenses]
-    let hasChanges = false
-
-    fixedExpenses.forEach((expense) => {
-      if (expense.isFixed && expense.isPaid && !expense.isRecurring) {
-        // Verificar se já existe uma despesa similar no próximo mês
-        if (!hasSimilarExpenseNextMonth(expense)) {
-          // Criar uma nova despesa para o próximo mês
-          const dueDate = new Date(expense.dueDate || today)
-          const nextMonth = new Date(dueDate)
-          nextMonth.setMonth(nextMonth.getMonth() + 1)
-
-          const newExpense: Expense = {
-            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-            name: expense.name,
-            amount: expense.amount,
-            category: expense.category,
-            paymentMethod: expense.paymentMethod,
-            date: today.toISOString().split("T")[0],
-            dueDate: nextMonth.toISOString().split("T")[0],
-            isPaid: false,
-            isFixed: true,
-            isRecurring: false,
-          }
-
-          // Adicionar a nova despesa
-          updatedFixedExpenses.push(newExpense)
-          hasChanges = true
-        }
-
-        // Marcar a despesa original como recorrente para evitar duplicações
-        const index = updatedFixedExpenses.findIndex((e) => e.id === expense.id)
-        if (index !== -1) {
-          updatedFixedExpenses[index] = {
-            ...updatedFixedExpenses[index],
-            isRecurring: true,
-          }
-          hasChanges = true
-        }
-      }
-    })
-
-    if (hasChanges) {
-      setFixedExpenses(updatedFixedExpenses)
+    if (statusEntry) {
+      return statusEntry.isPaid
     }
-  }, [fixedExpenses, isLoaded])
 
-  // Verificar despesas atrasadas e criar novas despesas
-  useEffect(() => {
-    if (!isLoaded) return
+    // Se não encontrarmos um status específico para este mês, verificamos o status original da despesa
+    // mas apenas para o mês em que a despesa foi criada
+    const expense = fixedExpenses.find((exp) => exp.id === expenseId)
+    if (expense && expense.dueDate && isDateInMonth(expense.dueDate, monthYear)) {
+      return expense.isPaid || false
+    }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    // Para outros meses, o padrão é não pago
+    return false
+  }
 
-    const updatedFixedExpenses = [...fixedExpenses]
-    let hasChanges = false
+  // Função para definir o status de pagamento de uma despesa em um mês específico
+  const setExpensePaymentStatus = (expenseId: string, monthYear: string, isPaid: boolean): void => {
+    // Verificar se já existe uma entrada para esta despesa e mês
+    const existingEntryIndex = monthlyPaymentStatus.findIndex(
+      (entry) => entry.expenseId === expenseId && entry.monthYear === monthYear,
+    )
 
-    fixedExpenses.forEach((expense) => {
-      if (expense.isFixed && !expense.isPaid && !expense.isRecurring) {
-        const dueDate = new Date(expense.dueDate || today)
-        dueDate.setHours(0, 0, 0, 0)
+    if (existingEntryIndex >= 0) {
+      // Atualizar a entrada existente
+      setMonthlyPaymentStatus((prev) => {
+        const updated = [...prev]
+        updated[existingEntryIndex] = { ...updated[existingEntryIndex], isPaid }
+        return updated
+      })
+    } else {
+      // Criar uma nova entrada
+      setMonthlyPaymentStatus((prev) => [...prev, { expenseId, monthYear, isPaid }])
+    }
+  }
 
-        // Criar uma data que é um dia após o vencimento
-        const oneDayAfterDueDate = new Date(dueDate)
-        oneDayAfterDueDate.setDate(oneDayAfterDueDate.getDate() + 1)
+  // Add this function after the isDateInMonth function
+  const getFixedExpensesForMonth = (monthYear: string): Expense[] => {
+    // Parse the target month and year
+    const [targetYear, targetMonth] = monthYear.split("-").map(Number)
+    const targetDate = new Date(targetYear, targetMonth - 1, 1)
 
-        // Se a data atual é pelo menos um dia após o vencimento, criar uma nova despesa
-        if (today >= oneDayAfterDueDate) {
-          // Verificar se já existe uma despesa similar no próximo mês
-          if (!hasSimilarExpenseNextMonth(expense)) {
-            // Criar uma nova despesa para o próximo mês
-            const nextMonth = new Date(dueDate)
-            nextMonth.setMonth(nextMonth.getMonth() + 1)
+    // Filter fixed expenses that should appear in this month
+    return fixedExpenses
+      .filter((expense) => {
+        if (!expense.dueDate) return false
 
-            const newExpense: Expense = {
-              id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-              name: expense.name,
-              amount: expense.amount,
-              category: expense.category,
-              paymentMethod: expense.paymentMethod,
-              date: today.toISOString().split("T")[0],
-              dueDate: nextMonth.toISOString().split("T")[0],
-              isPaid: false,
-              isFixed: true,
-              isRecurring: false,
-            }
+        // Parse the original due date
+        const originalDate = new Date(expense.dueDate)
+        const originalYear = originalDate.getFullYear()
+        const originalMonth = originalDate.getMonth() + 1
+        const originalDay = originalDate.getDate()
 
-            // Adicionar a nova despesa
-            updatedFixedExpenses.push(newExpense)
-            hasChanges = true
-          }
+        // Create a date object for the expense creation month
+        const expenseCreationMonth = `${originalYear}-${String(originalMonth).padStart(2, "0")}`
 
-          // Marcar a despesa original como recorrente para evitar duplicações
-          const index = updatedFixedExpenses.findIndex((e) => e.id === expense.id)
-          if (index !== -1) {
-            updatedFixedExpenses[index] = {
-              ...updatedFixedExpenses[index],
-              isRecurring: true,
-            }
-            hasChanges = true
+        // Don't show expenses in months before they were created
+        const expenseDate = new Date(originalYear, originalMonth - 1, 1)
+        if (targetDate < expenseDate) return false
+
+        return true
+      })
+      .map((expense) => {
+        // If we're looking at the original month, return the expense as is
+        if (isDateInMonth(expense.dueDate, monthYear)) {
+          return {
+            ...expense,
+            // Use the payment status from the original expense for its creation month
+            isPaid: expense.isPaid,
           }
         }
-      }
-    })
 
-    if (hasChanges) {
-      setFixedExpenses(updatedFixedExpenses)
-    }
-  }, [fixedExpenses, isLoaded])
+        // Otherwise, create a new version with updated due date for the target month
+        const originalDate = new Date(expense.dueDate)
+        const originalDay = originalDate.getDate()
+
+        // Create a new due date for the target month
+        const [year, month] = monthYear.split("-").map(Number)
+
+        // Handle month with fewer days (e.g., if original is 31st but target month only has 30 days)
+        const lastDayOfMonth = new Date(year, month, 0).getDate()
+        const adjustedDay = Math.min(originalDay, lastDayOfMonth)
+
+        const newDueDate = `${year}-${String(month).padStart(2, "0")}-${String(adjustedDay).padStart(2, "0")}`
+
+        // Get the payment status for this specific month
+        const isPaid = getExpensePaymentStatus(expense.id, monthYear)
+
+        // Return a modified version of the expense with the new due date
+        // We don't modify the original expense, just create a derived version for display
+        return {
+          ...expense,
+          dueDate: newDueDate,
+          isPaid,
+          // Keep the id the same but add a suffix to make it unique for this month
+          id: `${expense.id}_${monthYear}`,
+        }
+      })
+  }
 
   // Verificar se é dia de reset e salvar dados históricos
   useEffect(() => {
@@ -403,22 +360,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (!alreadySaved) {
         // Calcular o total gasto no mês
-        // MODIFICAÇÃO: Não considerar despesas fixas pagas no cálculo do total gasto
+        const fixedExpensesForMonth = getFixedExpensesForMonth(currentMonthYear)
         const totalMonthlySpent =
-          fixedExpenses
-            .filter((expense) => !expense.isPaid) // Apenas despesas não pagas
-            .reduce((sum, expense) => sum + expense.amount, 0) +
-          variableExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+          fixedExpensesForMonth.filter((expense) => expense.isPaid).reduce((sum, expense) => sum + expense.amount, 0) +
+          variableExpenses
+            .filter((expense) => expense.date && isDateInMonth(expense.date, currentMonthYear))
+            .reduce((sum, expense) => sum + expense.amount, 0)
+
+        // Calcular o orçamento total como a soma dos orçamentos das categorias
+        const totalBudget = customCategories.reduce((sum, category) => sum + category.budget, 0)
 
         // Criar o registro histórico
         const monthData: MonthlyData = {
           id: currentMonthYear,
           month: today.getMonth() + 1,
           year: today.getFullYear(),
-          fixedExpenses: [...fixedExpenses],
+          fixedExpenses: fixedExpensesForMonth,
           variableExpenses: [...variableExpenses],
           totalSpent: totalMonthlySpent,
-          budget: monthlyBudget,
+          budget: totalBudget,
         }
 
         // Adicionar ao histórico
@@ -429,9 +389,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setVariableExpenses([])
       }
     }
-  }, [isLoaded, resetDay, fixedExpenses, variableExpenses, monthlyBudget, monthlyHistory])
+  }, [isLoaded, resetDay, fixedExpenses, variableExpenses, customCategories, monthlyHistory])
 
-  // Função para navegar entre meses
   const navigateToMonth = (direction: "prev" | "next") => {
     const [year, month] = currentMonth.split("-").map(Number)
 
@@ -459,20 +418,39 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentMonth(newMonthFormatted)
   }
 
-  const totalSpent =
-    fixedExpenses
-      .filter((expense) => !expense.isPaid)
-      .reduce((sum, expense) => sum + expense.amount, 0) +
-    variableExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+  // Calcular o orçamento mensal como a soma dos orçamentos das categorias
+  const monthlyBudget = customCategories.reduce((sum, category) => sum + category.budget, 0)
 
+  // Calculate total spent for the current viewing month
+  const totalSpent = (() => {
+    // Get fixed expenses for the current month
+    const fixedExpensesForMonth = getFixedExpensesForMonth(currentMonth)
+
+    // Calculate total for fixed expenses that are paid
+    const fixedExpensesAmount = fixedExpensesForMonth
+      .filter((expense) => expense.isPaid)
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    // Calculate total for variable expenses in the current month
+    const variableExpensesAmount = variableExpenses
+      .filter((expense) => expense.date && isDateInMonth(expense.date, currentMonth))
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    return fixedExpensesAmount + variableExpensesAmount
+  })()
+
+  // Calculate remaining budget
   const remainingBudget = monthlyBudget - totalSpent
 
+  // Calculate expenses by category for the current viewing month
   const expensesByCategory = {}
 
+  // Inicializar todas as categorias com zero
   customCategories.forEach((category) => {
     expensesByCategory[category.id] = 0
   })
 
+  // Calculate expenses by payment method for the current viewing month
   const expensesByPaymentMethod = {
     PIX: 0,
     CARD: 0,
@@ -480,25 +458,43 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     OTHER: 0,
   }
 
-  ;[
-    ...fixedExpenses.filter((expense) => !expense.isPaid),
-    ...variableExpenses,
-  ].forEach((expense) => {
-    expensesByCategory[expense.category] = (expensesByCategory[expense.category] || 0) + expense.amount
-    expensesByPaymentMethod[expense.paymentMethod] += expense.amount
-  })
+  // Populate category and payment method totals for the current viewing month
+  ;(() => {
+    // Get fixed expenses for the current month
+    const fixedExpensesForMonth = getFixedExpensesForMonth(currentMonth)
 
+    // Process fixed expenses that are paid
+    fixedExpensesForMonth
+      .filter((expense) => expense.isPaid)
+      .forEach((expense) => {
+        expensesByCategory[expense.category] = (expensesByCategory[expense.category] || 0) + expense.amount
+        expensesByPaymentMethod[expense.paymentMethod] += expense.amount
+      })
+
+    // Process variable expenses for the current month
+    variableExpenses
+      .filter((expense) => expense.date && isDateInMonth(expense.date, currentMonth))
+      .forEach((expense) => {
+        expensesByCategory[expense.category] = (expensesByCategory[expense.category] || 0) + expense.amount
+        expensesByPaymentMethod[expense.paymentMethod] += expense.amount
+      })
+  })()
+
+  // Função para determinar o status de uma despesa
   const getExpenseStatus = (expense: Expense): ExpenseStatus => {
-    if (!expense.isFixed) return "PENDING"
+    if (!expense.isFixed) return "PENDING" // Despesas variáveis não têm status
 
     if (expense.isPaid) return "PAID"
 
+    // Verificar se a data de vencimento já passou há mais de um dia
     const today = new Date()
     const dueDate = new Date(expense.dueDate || today)
 
+    // Remover a parte de hora para comparar apenas as datas
     today.setHours(0, 0, 0, 0)
     dueDate.setHours(0, 0, 0, 0)
 
+    // Criar uma data que é um dia após o vencimento
     const oneDayAfterDueDate = new Date(dueDate)
     oneDayAfterDueDate.setDate(oneDayAfterDueDate.getDate() + 1)
 
@@ -509,73 +505,75 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return "PENDING"
   }
 
+  // No método addFixedExpense, adicionar a flag isFixed como true
   const addFixedExpense = (expense: Omit<Expense, "id">) => {
     if (isLocked) return
     const newExpense = {
       ...expense,
       id: Date.now().toString(),
       isFixed: true,
-      isRecurring: false,
     }
     setFixedExpenses((prev) => [...prev, newExpense])
   }
 
+  const getCategorySpent = (categoryId: string): number => {
+    // Get fixed expenses for the current month
+    const fixedExpensesForMonth = getFixedExpensesForMonth(currentMonth)
+
+    // Filter fixed expenses that are paid with category matching
+    const fixedExpensesAmount = fixedExpensesForMonth
+      .filter((expense) => expense.isPaid && expense.category === categoryId)
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    // Sum with variable expenses in the current viewing month
+    const variableExpensesAmount = variableExpenses
+      .filter((expense) => expense.category === categoryId && expense.date && isDateInMonth(expense.date, currentMonth))
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    return fixedExpensesAmount + variableExpensesAmount
+  }
+
+  // Update fixed expense - removed the code that creates new expenses
   const updateFixedExpense = (expense: Expense) => {
     if (isLocked) return
-
-    const originalExpense = fixedExpenses.find((e) => e.id === expense.id)
-    if (originalExpense && !originalExpense.isPaid && expense.isPaid) {
-      if (!hasSimilarExpenseNextMonth(expense)) {
-        const dueDate = new Date(expense.dueDate || new Date())
-        const nextMonth = new Date(dueDate)
-        nextMonth.setMonth(nextMonth.getMonth() + 1)
-
-        const newExpense: Expense = {
-          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-          name: expense.name,
-          amount: expense.amount,
-          category: expense.category,
-          paymentMethod: expense.paymentMethod,
-          date: new Date().toISOString().split("T")[0],
-          dueDate: nextMonth.toISOString().split("T")[0],
-          isPaid: false,
-          isFixed: true,
-          isRecurring: false,
-        }
-
-        setFixedExpenses((prev) => [...prev, newExpense])
-      }
-      expense.isRecurring = true
-    }
-
     setFixedExpenses((prev) => prev.map((item) => (item.id === expense.id ? expense : item)))
   }
 
+  // Delete fixed expense
   const deleteFixedExpense = (id: string) => {
     if (isLocked) return
+
+    // Also delete any monthly payment status entries for this expense
+    setMonthlyPaymentStatus((prev) => prev.filter((entry) => entry.expenseId !== id))
+
     setFixedExpenses((prev) => prev.filter((item) => item.id !== id))
   }
 
+  // No método addVariableExpense, adicionar a flag isFixed como false
   const addVariableExpense = (expense: Omit<Expense, "id">) => {
     if (isLocked) return
     const newExpense = { ...expense, id: Date.now().toString(), isFixed: false }
     setVariableExpenses((prev) => [...prev, newExpense])
   }
 
+  // Update variable expense
   const updateVariableExpense = (expense: Expense) => {
     if (isLocked) return
     setVariableExpenses((prev) => prev.map((item) => (item.id === expense.id ? expense : item)))
   }
 
+  // Delete variable expense
   const deleteVariableExpense = (id: string) => {
     if (isLocked) return
     setVariableExpenses((prev) => prev.filter((item) => item.id !== id))
   }
 
+  // Toggle lock
   const toggleLock = () => {
     setIsLocked((prev) => !prev)
   }
 
+  // Toggle Firebase sync
   const toggleFirebaseSync = () => {
     setSyncWithFirebase((prev) => !prev)
   }
@@ -597,37 +595,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     })
   }
 
-  const updateCategoryPercentage = (category: Category, percentage: number) => {
-    setCategoryBudgetPercentages((prev) => ({
-      ...prev,
-      [category]: percentage,
-    }))
-  }
-
-  const resetCategoryPercentages = () => {
-    setCategoryBudgetPercentages({
-      MONTHLY_BILLS: 0.5,
-      GROCERIES: 0.2,
-      LEISURE: 0.1,
-      FUEL: 0.1,
-      OTHER: 0.1,
-    })
-  }
-
+  // Funções para gerenciar categorias personalizadas
   const addCategory = (category: Omit<CustomCategory, "id">): string | null => {
     if (isLocked) return null
     const newCategory = {
       ...category,
       id: Date.now().toString(),
-      budget: monthlyBudget * (categoryBudgetPercentages[category.name] || 0),
     }
     setCustomCategories((prev) => [...prev, newCategory])
-
-    setCategoryBudgetPercentages((prev) => ({
-      ...prev,
-      [newCategory.id]: 0.05,
-    }))
-
     return newCategory.id
   }
 
@@ -639,6 +614,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteCategory = (id: string) => {
     if (isLocked) return
 
+    // Verificar se a categoria está sendo usada em alguma despesa
     const isUsed = [...fixedExpenses, ...variableExpenses].some((expense) => expense.category === id)
 
     if (isUsed) {
@@ -647,30 +623,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     setCustomCategories((prev) => prev.filter((item) => item.id !== id))
-    setCategoryBudgetPercentages((prev) => {
-      const newPercentages = { ...prev }
-      delete newPercentages[id]
-      return newPercentages
-    })
   }
 
+  // Funções para cálculos de orçamento por categoria
   const getCategoryBudget = (categoryId: string): number => {
     const category = customCategories.find((cat) => cat.id === categoryId)
     return category ? category.budget : 0
-  }
-
-  const getCategorySpent = (categoryId: string): number => {
-    // Filtrar despesas fixas pagas
-    const fixedExpensesAmount = fixedExpenses
-      .filter((expense) => !expense.isPaid && expense.category === categoryId)
-      .reduce((sum, expense) => sum + expense.amount, 0)
-
-    // Somar com despesas variáveis
-    const variableExpensesAmount = variableExpenses
-      .filter((expense) => expense.category === categoryId)
-      .reduce((sum, expense) => sum + expense.amount, 0)
-
-    return fixedExpensesAmount + variableExpensesAmount
   }
 
   const getCategoryRemaining = (categoryId: string): number => {
@@ -687,7 +645,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const value = {
     monthlyBudget,
-    setMonthlyBudget,
     fixedExpenses,
     addFixedExpense,
     updateFixedExpense,
@@ -707,9 +664,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     customTabNames,
     updateTabName,
     resetTabNames,
-    categoryBudgetPercentages,
-    updateCategoryPercentage,
-    resetCategoryPercentages,
     customCategories,
     addCategory,
     updateCategory,
@@ -725,7 +679,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     currentMonth,
     setCurrentMonth,
     navigateToMonth,
-    hasSimilarExpenseNextMonth,
+    isDateInMonth,
+    getFixedExpensesForMonth,
+    getExpensePaymentStatus,
+    setExpensePaymentStatus,
   }
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>

@@ -1,3 +1,5 @@
+"use client"
+
 import type React from "react"
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
@@ -43,14 +45,6 @@ const MonthNavigator: React.FC = () => {
     navigateToMonth("next")
   }
 
-  // Verificar se o próximo mês é futuro (não permitir navegar para o futuro)
-  const isNextMonthFuture = () => {
-    const nextMonthDate = new Date(year, month, 1)
-    const currentDate = new Date()
-    currentDate.setDate(1) // Comparar apenas mês e ano
-    return nextMonthDate > currentDate
-  }
-
   const styles = StyleSheet.create({
     container: {
       flexDirection: "row",
@@ -65,20 +59,22 @@ const MonthNavigator: React.FC = () => {
       flex: 1,
       alignItems: "center",
     },
+    monthInfo:{
+      alignItems: "baseline",
+      flexDirection: "row",
+    },
     monthText: {
       fontSize: 18,
       fontWeight: "bold",
       color: colors.text,
     },
     yearText: {
-      fontSize: 14,
+      fontSize: 12,
+      paddingHorizontal: 5,
       color: colors.text + "99",
     },
     navButton: {
       padding: 8,
-    },
-    navButtonDisabled: {
-      opacity: 0.3,
     },
     currentMonthIndicator: {
       backgroundColor: colors.primary,
@@ -91,7 +87,25 @@ const MonthNavigator: React.FC = () => {
       color: "#FFFFFF",
       fontSize: 12,
     },
+    futureMonthIndicator: {
+      backgroundColor: colors.warning,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 4,
+      marginTop: 4,
+    },
+    futureMonthText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+    },
   })
+
+  // Check if the month is in the future
+  const isFutureMonth = () => {
+    const currentDate = new Date()
+    const viewingDate = new Date(year, month - 1, 1)
+    return viewingDate > currentDate
+  }
 
   return (
     <View style={styles.container}>
@@ -100,20 +114,23 @@ const MonthNavigator: React.FC = () => {
       </TouchableOpacity>
 
       <View style={styles.monthContainer}>
-        <Text style={styles.monthText}>{monthName}</Text>
-        <Text style={styles.yearText}>{year}</Text>
+        <View style={styles.monthInfo}>
+          <Text style={styles.monthText}>{monthName}</Text>
+          <Text style={styles.yearText}>{year}</Text>
+        </View>
         {isCurrentMonth && (
           <View style={styles.currentMonthIndicator}>
             <Text style={styles.currentMonthText}>Atual</Text>
           </View>
         )}
+        {isFutureMonth() && (
+          <View style={styles.futureMonthIndicator}>
+            <Text style={styles.futureMonthText}>Futuro</Text>
+          </View>
+        )}
       </View>
 
-      <TouchableOpacity
-        style={[styles.navButton, isNextMonthFuture() && styles.navButtonDisabled]}
-        onPress={handleNextMonth}
-        disabled={isNextMonthFuture()}
-      >
+      <TouchableOpacity style={styles.navButton} onPress={handleNextMonth}>
         <Ionicons name="chevron-forward" size={24} color={colors.primary} />
       </TouchableOpacity>
     </View>
@@ -121,4 +138,3 @@ const MonthNavigator: React.FC = () => {
 }
 
 export default MonthNavigator
-

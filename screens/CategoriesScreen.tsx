@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ScrollView , Modal} from "react-native"
+import { useState, useRef, useEffect } from "react"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ScrollView, Modal } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { useFinance, type CustomCategory } from "../context/FinanceContext"
 import { Ionicons } from "@expo/vector-icons"
@@ -18,8 +18,6 @@ const CategoriesScreen: React.FC = () => {
     deleteCategory,
     isLocked,
     monthlyBudget,
-    categoryBudgetPercentages,
-    updateCategoryPercentage,
     getCategoryBudget,
     getCategorySpent,
     getCategoryRemaining,
@@ -32,7 +30,8 @@ const CategoriesScreen: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null)
   const [name, setName] = useState("")
   const [color, setColor] = useState("#FF6384")
-  const [percentage, setPercentage] = useState("0")
+  const [budget, setBudget] = useState("")
+  const budgetInputRef = useRef<TextInput>(null)
 
   const predefinedColors = [
     "#FF6384",
@@ -52,7 +51,7 @@ const CategoriesScreen: React.FC = () => {
     setEditingCategory(null)
     setName("")
     setColor(predefinedColors[0])
-    setPercentage("0")
+    setBudget("")
     setShowForm(true)
   }
 
@@ -61,9 +60,18 @@ const CategoriesScreen: React.FC = () => {
     setEditingCategory(category)
     setName(category.name)
     setColor(category.color)
-    setPercentage(((categoryBudgetPercentages[category.id] || 0) * 100).toString())
+    setBudget(category.budget.toString())
     setShowForm(true)
   }
+
+  useEffect(() => {
+    // Quando o formulário é aberto, focar no campo de orçamento
+    if (showForm && budgetInputRef.current) {
+      setTimeout(() => {
+        budgetInputRef.current?.focus()
+      }, 100)
+    }
+  }, [showForm])
 
   const handleDeleteCategory = (category: CustomCategory) => {
     if (isLocked) return
@@ -84,9 +92,9 @@ const CategoriesScreen: React.FC = () => {
       return
     }
 
-    const percentageValue = Number.parseFloat(percentage) / 100
-    if (isNaN(percentageValue) || percentageValue < 0 || percentageValue > 1) {
-      Alert.alert("Erro", "A porcentagem deve ser um valor entre 0 e 100")
+    const budgetValue = Number.parseFloat(budget)
+    if (isNaN(budgetValue) || budgetValue < 0) {
+      Alert.alert("Erro", "O orçamento deve ser um valor numérico positivo")
       return
     }
 
@@ -96,21 +104,16 @@ const CategoriesScreen: React.FC = () => {
         ...editingCategory,
         name,
         color,
+        budget: budgetValue,
       })
-      updateCategoryPercentage(editingCategory.id, percentageValue)
     } else {
       // Adicionar nova categoria
       const newCategory = {
         name,
         color,
-        budget: monthlyBudget * percentageValue,
+        budget: budgetValue,
       }
-      const newCategoryId = addCategory(newCategory)
-
-      // Atualizar a porcentagem da categoria
-      if (newCategoryId) {
-        updateCategoryPercentage(newCategoryId, percentageValue)
-      }
+      addCategory(newCategory)
     }
 
     setShowForm(false)
@@ -135,6 +138,13 @@ const CategoriesScreen: React.FC = () => {
       color: colors.text + "99",
       marginBottom: 16,
     },
+    totalBudget: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: colors.primary,
+      marginBottom: 16,
+      textAlign: "center",
+    },
     addButton: {
       backgroundColor: colors.primary,
       padding: 12,
@@ -142,7 +152,7 @@ const CategoriesScreen: React.FC = () => {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 16,
+      marginBottom: 5,
     },
     addButtonText: {
       color: "#FFFFFF",
@@ -306,139 +316,135 @@ const CategoriesScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-    <View style={styles.header}>
-      <TouchableOpacity 
-        style={styles.backButton} 
-        onPress={() => navigation.goBack()}
-      >
-        <Ionicons name="arrow-back" size={24} color={colors.text} />
-        <Text style={styles.backButtonText}>Voltar</Text>
-      </TouchableOpacity>
-  
-      {!isLocked && (
-        <TouchableOpacity style={styles.addButton} onPress={handleAddCategory}>
-          <Ionicons name="add" size={20} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>Nova Categoria</Text>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <Text style={styles.backButtonText}>Voltar</Text>
         </TouchableOpacity>
-      )}
-    </View>
-  
-    <FlatList
-      data={customCategories}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={{ padding: 16 }}
-      renderItem={({ item }) => (
-        <View style={styles.categoryItem}>
-          <View style={styles.categoryHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={[styles.categoryColor, { backgroundColor: item.color }]} />
-              <Text style={styles.categoryName}>{item.name}</Text>
-              <Text style={styles.budgetValue}>{(categoryBudgetPercentages[item.id] * 100).toFixed(0)}%</Text>
+        
+        <Text style={styles.totalBudget}>Orçamento Total: R$ {monthlyBudget.toFixed(2)}</Text>
+
+        {!isLocked && (
+          <TouchableOpacity style={styles.addButton} onPress={handleAddCategory}>
+            <Ionicons name="add" size={20} color="#FFFFFF" />
+            <Text style={styles.addButtonText}>Nova Categoria</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <FlatList
+        data={customCategories}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: 16 }}
+        renderItem={({ item }) => (
+          <View style={styles.categoryItem}>
+            <View style={styles.categoryHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={[styles.categoryColor, { backgroundColor: item.color }]} />
+                <Text style={styles.categoryName}>{item.name}</Text>
+                <Text style={styles.budgetValue}>R$ {item.budget.toFixed(2)}</Text>
+              </View>
+
             </View>
+
+            <View style={styles.budgetInfo}>
+              <Text style={styles.budgetLabel}>Gasto:</Text>
+              <Text style={styles.budgetValue}>R$ {getCategorySpent(item.id).toFixed(2)}</Text>
+            </View>
+
+            <View style={styles.budgetInfo}>
+              <Text style={styles.budgetLabel}>Restante:</Text>
+              <Text
+                style={[
+                  styles.budgetValue,
+                  { color: getCategoryRemaining(item.id) >= 0 ? colors.success : colors.danger },
+                ]}
+              >
+                R$ {getCategoryRemaining(item.id).toFixed(2)}
+              </Text>
+            </View>
+
+            <BudgetProgressBar current={getCategorySpent(item.id)} total={item.budget} />
+
+            {!isLocked && (
+              <View style={styles.actions}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleEditCategory(item)}>
+                  <Ionicons name="create-outline" size={20} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteCategory(item)}>
+                  <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-  
-          <View style={styles.budgetInfo}>
-            <Text style={styles.budgetLabel}>Orçamento:</Text>
-            <Text style={styles.budgetValue}>R$ {getCategoryBudget(item.id).toFixed(2)}</Text>
-          </View>
-  
-          <View style={styles.budgetInfo}>
-            <Text style={styles.budgetLabel}>Gasto:</Text>
-            <Text style={styles.budgetValue}>R$ {getCategorySpent(item.id).toFixed(2)}</Text>
-          </View>
-  
-          <View style={styles.budgetInfo}>
-            <Text style={styles.budgetLabel}>Restante:</Text>
-            <Text style={[styles.budgetValue, { color: getCategoryRemaining(item.id) >= 0 ? colors.success : colors.danger }]}>
-              R$ {getCategoryRemaining(item.id).toFixed(2)}
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="folder-open-outline" size={64} color={colors.text + "40"} />
+            <Text style={styles.emptyText}>
+              Nenhuma categoria encontrada. {!isLocked ? "Toque no botão + para adicionar." : ""}
             </Text>
           </View>
-  
-          <BudgetProgressBar current={getCategorySpent(item.id)} total={getCategoryBudget(item.id)} />
-  
-          {!isLocked && (
-            <View style={styles.actions}>
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleEditCategory(item)}>
-                <Ionicons name="create-outline" size={20} color={colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteCategory(item)}>
-                <Ionicons name="trash-outline" size={20} color={colors.danger} />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
-      ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <Ionicons name="folder-open-outline" size={64} color={colors.text + "40"} />
-          <Text style={styles.emptyText}>
-            Nenhuma categoria encontrada. {!isLocked ? "Toque no botão + para adicionar." : ""}
-          </Text>
-        </View>
-      }
-    />
-  
-    <Modal
-      visible={showForm}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={() => setShowForm(false)}
-    >
-      <View style={styles.modalContainer}>
-        <ScrollView style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{editingCategory ? "Editar Categoria" : "Nova Categoria"}</Text>
-  
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Nome</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Nome da categoria"
-              placeholderTextColor={colors.text + "80"}
-            />
-          </View>
-  
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Cor</Text>
-            <View style={styles.colorPicker}>
-              {predefinedColors.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[styles.colorOption, { backgroundColor: c }, color === c && styles.colorSelected]}
-                  onPress={() => setColor(c)}
+        }
+      />
+
+      {showForm && (
+        <Modal visible={showForm} transparent={true} animationType="fade" onRequestClose={() => setShowForm(false)}>
+          <View style={styles.modalContainer}>
+            <ScrollView style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{editingCategory ? "Editar Categoria" : "Nova Categoria"}</Text>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Nome</Text>
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Nome da categoria"
+                  placeholderTextColor={colors.text + "80"}
                 />
-              ))}
-            </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Orçamento (R$)</Text>
+                <TextInput
+                  ref={budgetInputRef}
+                  style={styles.input}
+                  value={budget}
+                  onChangeText={setBudget}
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  placeholderTextColor={colors.text + "80"}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Cor</Text>
+                <View style={styles.colorPicker}>
+                  {predefinedColors.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.colorOption, { backgroundColor: c }, color === c && styles.colorSelected]}
+                      onPress={() => setColor(c)}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => setShowForm(false)}>
+                  <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.button, styles.submitButton]} onPress={handleSubmit}>
+                  <Text style={[styles.buttonText, styles.submitButtonText]}>Salvar</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-  
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Porcentagem do Orçamento (%)</Text>
-            <TextInput
-              style={styles.input}
-              value={percentage}
-              onChangeText={setPercentage}
-              keyboardType="numeric"
-              placeholder="0"
-              placeholderTextColor={colors.text + "80"}
-              autoFocus={true}
-            />
-          </View>
-  
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => setShowForm(false)}>
-              <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, styles.submitButton]} onPress={handleSubmit}>
-              <Text style={[styles.buttonText, styles.submitButtonText]}>Salvar</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
-    </Modal>
-  </View>
+        </Modal>
+      )}
+    </View>
   )
 }
 
 export default CategoriesScreen
-

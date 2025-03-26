@@ -45,8 +45,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   const { isLocked, customCategories } = useFinance()
 
   const [name, setName] = useState(initialValues.name)
-  const [amount, setAmount] = useState(initialValues.amount)
   const [category, setCategory] = useState<Category>(initialValues.category)
+  const [amount, setAmount] = useState(() => {
+    const amountInReals = initialValues.amount || 0
+    const amountInCents = Math.round(amountInReals * 100)
+    return amountInCents.toString()
+  })
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialValues.paymentMethod)
 
   // Date state management
@@ -148,11 +152,13 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     // Get the category name to use as default if no name is provided
     const categoryObj = customCategories.find((cat) => cat.id === category)
     const categoryName = categoryObj ? categoryObj.name : ""
+    const amountInCents = Number.parseInt(amount || "0", 10)
+    const amountInReals = amountInCents / 100
 
     const expenseData = {
       id: initialValues.id,
       name: name || categoryName, // Use category name if no name is provided
-      amount: Number.parseFloat(amount) || 0,
+      amount: amountInReals,
       category,
       paymentMethod,
       date: formatDateForStorage(date),
@@ -403,7 +409,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
           <PriceInput value={amount} onChangeText={setAmount} error={errors.amount} />
         </Animated.View>
         <TextInput
-          style={{alignSelf: "center", color: colors.text}}
+          style={{alignSelf: "center", color: colors.text, textAlign: "center"}}
           value={name}
           onChangeText={setName}
           placeholder="Descrição da despesa (opcional)"

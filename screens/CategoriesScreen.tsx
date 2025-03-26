@@ -33,6 +33,28 @@ const CategoriesScreen: React.FC = () => {
   const [budget, setBudget] = useState("")
   const budgetInputRef = useRef<TextInput>(null)
 
+  // Adicionar estado para o ícone
+  const [icon, setIcon] = useState("apps")
+
+  // Adicionar lista de ícones predefinidos
+  const predefinedIcons = [
+    "calendar",
+    "cart",
+    "game-controller",
+    "car",
+    "apps",
+    "home",
+    "restaurant",
+    "medkit",
+    "book",
+    "airplane",
+    "fitness",
+    "gift",
+    "pricetag",
+    "school",
+    "bus",
+  ]
+
   const predefinedColors = [
     "#FF6384",
     "#36A2EB",
@@ -46,21 +68,25 @@ const CategoriesScreen: React.FC = () => {
     "#EF9A9A",
   ]
 
-  const handleAddCategory = () => {
-    if (isLocked) return
-    setEditingCategory(null)
-    setName("")
-    setColor(predefinedColors[0])
-    setBudget("")
-    setShowForm(true)
-  }
-
+  // Atualizar o handleEditCategory para incluir o ícone
   const handleEditCategory = (category: CustomCategory) => {
     if (isLocked) return
     setEditingCategory(category)
     setName(category.name)
     setColor(category.color)
     setBudget(category.budget.toString())
+    setIcon(category.icon || "apps")
+    setShowForm(true)
+  }
+
+  // Atualizar o handleAddCategory para incluir o ícone padrão
+  const handleAddCategory = () => {
+    if (isLocked) return
+    setEditingCategory(null)
+    setName("")
+    setColor(predefinedColors[0])
+    setBudget("")
+    setIcon("apps")
     setShowForm(true)
   }
 
@@ -86,6 +112,7 @@ const CategoriesScreen: React.FC = () => {
     ])
   }
 
+  // Atualizar o handleSubmit para incluir o ícone
   const handleSubmit = () => {
     if (!name.trim()) {
       Alert.alert("Erro", "O nome da categoria é obrigatório")
@@ -105,6 +132,7 @@ const CategoriesScreen: React.FC = () => {
         name,
         color,
         budget: budgetValue,
+        icon,
       })
     } else {
       // Adicionar nova categoria
@@ -112,6 +140,7 @@ const CategoriesScreen: React.FC = () => {
         name,
         color,
         budget: budgetValue,
+        icon,
       }
       addCategory(newCategory)
     }
@@ -183,9 +212,9 @@ const CategoriesScreen: React.FC = () => {
       flex: 1,
     },
     categoryColor: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
+      width: 30,
+      height: 30,
+      borderRadius: 20,
       marginRight: 8,
     },
     budgetInfo: {
@@ -249,14 +278,13 @@ const CategoriesScreen: React.FC = () => {
     colorPicker: {
       flexDirection: "row",
       flexWrap: "wrap",
-      justifyContent: "space-between",
-      marginTop: 8,
     },
     colorOption: {
       width: 36,
       height: 36,
       borderRadius: 18,
-      margin: 4,
+      marginLeft: 16,
+      marginVertical: 4,
       borderWidth: 2,
       borderColor: "transparent",
     },
@@ -266,7 +294,7 @@ const CategoriesScreen: React.FC = () => {
     buttonContainer: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginTop: 24,
+      marginTop: 2,
     },
     button: {
       flex: 1,
@@ -312,6 +340,24 @@ const CategoriesScreen: React.FC = () => {
       color: colors.text,
       marginLeft: 8,
     },
+    iconPicker: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    iconOption: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      margin: 4,
+      borderWidth: 2,
+      borderColor: "transparent",
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: colors.background,
+    },
+    iconSelected: {
+      borderColor: colors.primary,
+    },
   })
 
   return (
@@ -321,7 +367,7 @@ const CategoriesScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
           <Text style={styles.backButtonText}>Voltar</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.totalBudget}>Orçamento Total: R$ {monthlyBudget.toFixed(2)}</Text>
 
         {!isLocked && (
@@ -338,13 +384,17 @@ const CategoriesScreen: React.FC = () => {
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item }) => (
           <View style={styles.categoryItem}>
+            {
+              // Atualizar a renderização das categorias para mostrar ícones
+            }
             <View style={styles.categoryHeader}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={[styles.categoryColor, { backgroundColor: item.color }]} />
+                <View style={[styles.categoryColor, { backgroundColor: item.color, alignItems: "center", justifyContent: "center" }]}>
+                  <Ionicons name={item.icon || "apps"} size={18} color={colors.text} />
+                </View>
                 <Text style={styles.categoryName}>{item.name}</Text>
                 <Text style={styles.budgetValue}>R$ {item.budget.toFixed(2)}</Text>
               </View>
-
             </View>
 
             <View style={styles.budgetInfo}>
@@ -431,6 +481,21 @@ const CategoriesScreen: React.FC = () => {
                 </View>
               </View>
 
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Ícone</Text>
+                <View style={styles.iconPicker}>
+                  {predefinedIcons.map((iconName) => (
+                    <TouchableOpacity
+                      key={iconName}
+                      style={[styles.iconOption, icon === iconName && styles.iconSelected]}
+                      onPress={() => setIcon(iconName)}
+                    >
+                      <Ionicons name={iconName} size={24} color={icon === iconName ? colors.primary : colors.text} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
               <View style={styles.buttonContainer}>
                 <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => setShowForm(false)}>
                   <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancelar</Text>
@@ -448,3 +513,4 @@ const CategoriesScreen: React.FC = () => {
 }
 
 export default CategoriesScreen
+

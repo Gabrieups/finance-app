@@ -15,6 +15,7 @@ export interface CustomCategory {
   name: string
   budget: number // Orçamento alocado para esta categoria em valor monetário
   color: string // Cor para representação visual
+  icon: string // Nome do ícone do Ionicons
 }
 
 // Atualizar a interface Expense para incluir a flag isFixed
@@ -55,6 +56,15 @@ export interface TabNames {
   variable: string
   analytics: string
   settings: string
+}
+
+// Adicionar interface para as seções da tela Home
+export interface HomeSection {
+  id: string
+  title: string
+  type: "budget" | "fixedExpenses" | "categories" | "recentExpenses"
+  visible: boolean
+  order: number
 }
 
 interface FinanceContextType {
@@ -102,6 +112,9 @@ interface FinanceContextType {
   // Novas funções para gerenciar o status de pagamento por mês
   getExpensePaymentStatus: (expenseId: string, monthYear: string) => boolean
   setExpensePaymentStatus: (expenseId: string, monthYear: string, isPaid: boolean) => void
+  homeSections: HomeSection[]
+  updateHomeSectionOrder: (sections: HomeSection[]) => void
+  toggleHomeSectionVisibility: (sectionId: string) => void
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined)
@@ -116,11 +129,11 @@ export const useFinance = () => {
 
 // Categorias padrão com orçamentos em valores monetários
 const DEFAULT_CATEGORIES: CustomCategory[] = [
-  { id: "MONTHLY_BILLS", name: "Contas Mensais", budget: 1000, color: "#FF6384" },
-  { id: "GROCERIES", name: "Mercado", budget: 500, color: "#36A2EB" },
-  { id: "LEISURE", name: "Lazer", budget: 300, color: "#FFCE56" },
-  { id: "FUEL", name: "Gasolina", budget: 200, color: "#4BC0C0" },
-  { id: "OTHER", name: "Outros", budget: 200, color: "#9966FF" },
+  { id: "MONTHLY_BILLS", name: "Contas Mensais", budget: 1000, color: "#FF6384", icon: "calendar" },
+  { id: "GROCERIES", name: "Mercado", budget: 500, color: "#36A2EB", icon: "cart" },
+  { id: "LEISURE", name: "Lazer", budget: 300, color: "#FFCE56", icon: "game-controller" },
+  { id: "FUEL", name: "Gasolina", budget: 200, color: "#4BC0C0", icon: "car" },
+  { id: "OTHER", name: "Outros", budget: 200, color: "#9966FF", icon: "apps" },
 ]
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -153,6 +166,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`,
   )
 
+  // Adicionar estado para as seções da tela Home
+  const [homeSections, setHomeSections] = useState<HomeSection[]>([
+    { id: "budget", title: "Orçamento Mensal", type: "budget", visible: true, order: 0 },
+    { id: "fixedExpenses", title: "Despesas Fixas", type: "fixedExpenses", visible: true, order: 1 },
+    { id: "categories", title: "Progressos", type: "categories", visible: true, order: 2 },
+    { id: "recentExpenses", title: "Despesas Recentes", type: "recentExpenses", visible: true, order: 3 },
+  ])
+
   // Load data from AsyncStorage on mount
   useEffect(() => {
     const loadData = async () => {
@@ -166,6 +187,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const resetDayData = await AsyncStorage.getItem("resetDay")
         const monthlyHistoryData = await AsyncStorage.getItem("monthlyHistory")
         const monthlyPaymentStatusData = await AsyncStorage.getItem("monthlyPaymentStatus")
+        const homeSectionsData = await AsyncStorage.getItem("homeSections")
 
         if (fixedData) setFixedExpenses(JSON.parse(fixedData))
         if (variableData) setVariableExpenses(JSON.parse(variableData))
@@ -176,6 +198,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (resetDayData) setResetDay(Number.parseInt(resetDayData))
         if (monthlyHistoryData) setMonthlyHistory(JSON.parse(monthlyHistoryData))
         if (monthlyPaymentStatusData) setMonthlyPaymentStatus(JSON.parse(monthlyPaymentStatusData))
+        if (homeSectionsData) setHomeSections(JSON.parse(homeSectionsData))
       } catch (error) {
         console.error("Error loading data from AsyncStorage:", error)
       } finally {
@@ -643,6 +666,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return budget > 0 ? (spent / budget) * 100 : 0
   }
 
+  // Adicionar funções para gerenciar as seções da tela Home
+  const updateHomeSectionOrder = (sections: HomeSection[]) => {
+    setHomeSections(sections)
+    AsyncStorage.setItem("homeSections", JSON.stringify(sections)).catch((err) =>
+      console.error("Error saving home sections:", err),
+    )
+  }
+
+  const toggleHomeSectionVisibility = (sectionId: string) => {
+    setHomeSections((prev) => {
+      const updated = prev.map((section) =>
+        section.id === sectionId ? { ...section, visible: !section.visible } : section,
+      )
+      AsyncStorage.setItem("homeSections", JSON.stringify(updated)).catch((err) =>
+        console.error("Error saving home sections:", err),
+      )
+      return updated
+    })
+  }
+
   const value = {
     monthlyBudget,
     fixedExpenses,
@@ -683,6 +726,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     getFixedExpensesForMonth,
     getExpensePaymentStatus,
     setExpensePaymentStatus,
+    homeSections,
+    updateHomeSectionOrder,
+    toggleHomeSectionVisibility,
   }
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>

@@ -45,6 +45,9 @@ const HomeScreen: React.FC = () => {
   const [expandCategories, setExpandCategories] = useState(false)
   // Estado para controlar o filtro de despesas fixas (pagas/não pagas/atrasadas)
   const [fixedExpensesFilter, setFixedExpensesFilter] = useState<"PENDING" | "PAID" | "OVERDUE">("PENDING")
+  // No bloco de estados do componente, adicione:
+  const [expandedFixedExpenses, setExpandedFixedExpenses] = useState(false)
+  const [expandedRecentExpenses, setExpandedRecentExpenses] = useState(false)
 
   // Estado para armazenar os dados do mês atual ou histórico
   const [displayData, setDisplayData] = useState<{
@@ -267,9 +270,10 @@ const HomeScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.sectionHeaderWithButton}>
+              <TouchableOpacity style={styles.sectionHeaderWithButton} onPress={() => navigateToExpenses("FIXED")}>
                 <Text style={styles.sectionTitle}>{section.title}</Text>
-              </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </TouchableOpacity>
             )}
 
             <View style={styles.filterButtonsContainer}>
@@ -316,10 +320,12 @@ const HomeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.card}>
+            {/* Modifique a renderização das despesas fixas no método renderSection: */}
+            {/* Altere o trecho que renderiza as fixedExpenses dentro do case "fixedExpenses": */}
+            <TouchableOpacity style={styles.card} onPress={() => navigateToExpenses("FIXED")}>
               {sortedFixedExpenses.length > 0 ? (
                 <>
-                  {sortedFixedExpenses.slice(0, 3).map((expense) => (
+                  {(expandedFixedExpenses ? sortedFixedExpenses : sortedFixedExpenses.slice(0, 3)).map((expense) => (
                     <ExpenseItem
                       key={expense.id}
                       expense={expense}
@@ -328,12 +334,23 @@ const HomeScreen: React.FC = () => {
                       onTogglePaid={() => isViewingCurrentMonth && handleTogglePaid(expense)}
                     />
                   ))}
-                  <TouchableOpacity style={styles.navigateButton} onPress={() => navigateToExpenses("FIXED")}>
-                    <Text style={styles.navigateButtonText}>Ver todas</Text>
-                    <Ionicons name="arrow-forward-circle" size={16} color={colors.primary} />
-                  </TouchableOpacity>
-                </> 
-            ) : (
+                  {sortedFixedExpenses.length > 3 && (
+                    <TouchableOpacity
+                      style={styles.navigateButton}
+                      onPress={() => setExpandedFixedExpenses(!expandedFixedExpenses)}
+                    >
+                      <Text style={styles.navigateButtonText}>
+                        {expandedFixedExpenses ? "Mostrar menos" : "Ver todas"}
+                      </Text>
+                      <Ionicons
+                        name={expandedFixedExpenses ? "chevron-up" : "chevron-down"}
+                        size={16}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
                 <Text style={styles.noExpensesText}>
                   Nenhuma despesa fixa{" "}
                   {fixedExpensesFilter === "PENDING"
@@ -344,7 +361,7 @@ const HomeScreen: React.FC = () => {
                   encontrada.
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
           </View>
         )
 
@@ -379,12 +396,13 @@ const HomeScreen: React.FC = () => {
                       <View key={category.id} style={styles.categoryProgressContainer}>
                         <View style={styles.categoryHeader}>
                           <View style={{ flexDirection: "row", alignItems: "center" }}>
-                            <View style={[styles.categoryColorIndicator, { backgroundColor: category.color, alignItems: "center", justifyContent: "center" }]}>
-                              <Ionicons
-                                name={category.icon || "apps"}
-                                size={16}
-                                color={colors.text}
-                              />
+                            <View
+                              style={[
+                                styles.categoryColorIndicator,
+                                { backgroundColor: category.color, alignItems: "center", justifyContent: "center" },
+                              ]}
+                            >
+                              <Ionicons name={category.icon || "apps"} size={16} color={colors.text} />
                             </View>
                             <Text style={styles.categoryTitle}>{category.name}</Text>
                           </View>
@@ -435,33 +453,44 @@ const HomeScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.sectionHeaderWithButton}>
+              <TouchableOpacity style={styles.sectionHeaderWithButton} onPress={() => navigateToExpenses("VARIABLE")}>
                 <Text style={styles.sectionTitle}>{section.title}</Text>
-              </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </TouchableOpacity>
             )}
 
-            <View style={styles.recentExpensesCard}>
+            {/* Faça a mesma alteração para as despesas recentes dentro do case "recentExpenses": */}
+            <TouchableOpacity style={styles.recentExpensesCard} onPress={() => navigateToExpenses("VARIABLE")}>
               {recentVariableExpenses.length > 0 ? (
-                recentVariableExpenses.map((expense) => (
-                  <View key={expense.id}>
-                    <View style={styles.recentExpenseItem}>
-                      <Text style={styles.expenseName}>{expense.name}</Text>
-                      <Text style={styles.expenseAmount}>R$ {expense.amount.toFixed(2)}</Text>
-                    </View>
-              
+                <>
+                  {(expandedRecentExpenses ? recentVariableExpenses : recentVariableExpenses.slice(0, 3)).map(
+                    (expense) => (
+                      <View key={expense.id} style={styles.recentExpenseItem}>
+                        <Text style={styles.expenseName}>{expense.name}</Text>
+                        <Text style={styles.expenseAmount}>R$ {expense.amount.toFixed(2)}</Text>
+                      </View>
+                    ),
+                  )}
+                  {recentVariableExpenses.length > 3 && (
                     <TouchableOpacity
                       style={styles.navigateButton}
-                      onPress={() => navigateToExpenses("VARIABLE")}
+                      onPress={() => setExpandedRecentExpenses(!expandedRecentExpenses)}
                     >
-                      <Text style={styles.navigateButtonText}>Ver todas</Text>
-                      <Ionicons name="arrow-forward-circle" size={16} color={colors.primary} />
+                      <Text style={styles.navigateButtonText}>
+                        {expandedRecentExpenses ? "Mostrar menos" : "Ver todas"}
+                      </Text>
+                      <Ionicons
+                        name={expandedRecentExpenses ? "chevron-up" : "chevron-down"}
+                        size={16}
+                        color={colors.primary}
+                      />
                     </TouchableOpacity>
-                  </View>
-                ))
+                  )}
+                </>
               ) : (
                 <Text style={styles.noExpensesText}>Nenhuma despesa recente</Text>
               )}
-            </View>
+            </TouchableOpacity>
           </View>
         )
 
@@ -502,7 +531,7 @@ const HomeScreen: React.FC = () => {
       paddingVertical: 15,
       borderRadius: 8,
       marginHorizontal: 16,
-      marginBottom: 125
+      marginBottom: 125,
     },
     editButtonActive: {
       backgroundColor: colors.primary,
@@ -511,11 +540,11 @@ const HomeScreen: React.FC = () => {
       fontSize: 14,
       color: colors.text,
       marginLeft: 4,
-      fontWeight: "bold"
+      fontWeight: "bold",
     },
     editButtonTextActive: {
       color: colors.text,
-      fontWeight: "bold"
+      fontWeight: "bold",
     },
     sectionContainer: {
       marginBottom: 16,
@@ -643,7 +672,7 @@ const HomeScreen: React.FC = () => {
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 8,
-      justifyContent: "center"
+      justifyContent: "center",
     },
     navigateButtonText: {
       fontSize: 14,
@@ -848,25 +877,15 @@ const HomeScreen: React.FC = () => {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 20 }}
           />
-          <TouchableOpacity
-            style={[styles.editButton, editMode && styles.editButtonActive]}
-            onPress={toggleEditMode}
-          >
-            <Ionicons
-              name={"checkmark"}
-              size={20}
-              color={colors.text}
-            />
-            <Text style={[styles.editButtonText, editMode && styles.editButtonTextActive]}>
-              {"Concluir"}
-            </Text>
+          <TouchableOpacity style={[styles.editButton, editMode && styles.editButtonActive]} onPress={toggleEditMode}>
+            <Ionicons name={"checkmark"} size={20} color={colors.text} />
+            <Text style={[styles.editButtonText, editMode && styles.editButtonTextActive]}>{"Concluir"}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         // Quando não estiver no modo de edição, usar o ScrollView
         <ScrollView>
           <View style={styles.content}>
-
             {/* Navegador de meses */}
             <MonthNavigator />
 

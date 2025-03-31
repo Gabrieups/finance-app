@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, Modal } from "react-native"
+import { useState, useEffect, useRef } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, Animated } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { useFinance, type ExpenseStatus, type PaymentMethod } from "../context/FinanceContext"
 import ExpenseItem from "../components/ExpenseItem"
@@ -10,6 +10,8 @@ import ExpenseForm from "../components/ExpenseForm"
 import { Ionicons } from "@expo/vector-icons"
 import MonthNavigator from "../components/MonthNavigator"
 import AsyncStorage from "@react-native-async-storage/async-storage"
+// No início do arquivo, importe o novo componente ExpenseProgressChart
+import ExpenseProgressChart from "../components/ExpenseProgressChart"
 
 type TabType = "FIXED" | "VARIABLE"
 type SortType = "DATE" | "NAME" | "AMOUNT"
@@ -43,7 +45,7 @@ const ExpensesScreen: React.FC = ({ route }) => {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [sortType, setSortType] = useState<SortType>("DATE")
-  const [sortDirection, setSortDirection] = useState<SortDirection>("DESC")
+  const [sortDirection, setSortDirection] = useState<SortDirection>("ASC")
   const [showSortModal, setShowSortModal] = useState(false)
   const [showStatusFilterModal, setShowStatusFilterModal] = useState(false)
   const [showPaymentMethodFilterModal, setShowPaymentMethodFilterModal] = useState(false)
@@ -53,6 +55,11 @@ const ExpensesScreen: React.FC = ({ route }) => {
   const [filteredExpensesState, setFilteredExpensesState] = useState([])
   const [deleteMode, setDeleteMode] = useState<"CURRENT" | "ALL" | null>(null)
   const [expenseToDelete, setExpenseToDelete] = useState(null)
+  // No state do componente, adicione uma flag para controlar a expansão de itens
+  // Junto com os outros estados
+  const [expandedView, setExpandedView] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const scrollY = useRef(new Animated.Value(0)).current
 
   // Check if we're viewing the current month or historical data
   const today = new Date()
@@ -105,7 +112,7 @@ const ExpensesScreen: React.FC = ({ route }) => {
     const sorted = [...filtered].sort((a, b) => {
       if (sortType === "DATE") {
         const dateA = a.isFixed ? a.dueDate || "" : a.date
-        const dateB = b.isFixed ? b.dueDate || "" : b.date
+        const dateB = b.isFixed ? b.dueDate || "" : a.date
         return sortDirection === "ASC"
           ? new Date(dateA).getTime() - new Date(dateB).getTime()
           : new Date(dateB).getTime() - new Date(dateA).getTime()
@@ -531,6 +538,29 @@ const ExpensesScreen: React.FC = ({ route }) => {
     tabContent: {
       marginTop: 8,
     },
+    navigateButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 10,
+    },
+    navigateButtonText: {
+      color: colors.primary,
+      marginRight: 5,
+    },
+    showFiltersButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 10,
+      backgroundColor: colors.card,
+      borderRadius: 8,
+      marginBottom: 10,
+    },
+    showFiltersText: {
+      color: colors.primary,
+      marginRight: 5,
+    },
   })
 
   if (showForm) {
@@ -597,49 +627,6 @@ const ExpensesScreen: React.FC = ({ route }) => {
           </View>
         )}
 
-        {/* Search bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={colors.text + "80"} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar despesa..."
-            placeholderTextColor={colors.text + "80"}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <Ionicons name="close-circle" size={20} color={colors.text + "80"} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        {/* Filters */}
-        <View style={styles.filtersContainer}>
-          {/* Sort button */}
-          <TouchableOpacity style={styles.filterButton} onPress={() => setShowSortModal(true)}>
-            <Ionicons name="funnel" size={20} color={colors.text} />
-            <Text style={styles.filterText}>
-              {sortType === "DATE" ? "Data" : sortType === "NAME" ? "Nome" : "Valor"}
-            </Text>
-            <Ionicons name={getSortIcon()} size={16} color={colors.text} style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
-
-          {/* Status filter button - only for fixed expenses */}
-          {activeTab === "FIXED" && (
-            <TouchableOpacity style={styles.filterButton} onPress={() => setShowStatusFilterModal(true)}>
-              <Ionicons name="options" size={20} color={colors.text} />
-              <Text style={styles.filterText}>{getStatusFilterLabel()}</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Payment method filter button */}
-          <TouchableOpacity style={styles.filterButton} onPress={() => setShowPaymentMethodFilterModal(true)}>
-            <Ionicons name="card" size={20} color={colors.text} />
-            <Text style={styles.filterText}>{getPaymentMethodFilterLabel()}</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Tab-specific content */}
         <View style={styles.tabContent}>
           {/* Add button - only show in the appropriate tab */}
@@ -660,19 +647,99 @@ const ExpensesScreen: React.FC = ({ route }) => {
       </View>
 
       {filteredExpensesState.length > 0 ? (
-        <FlatList
-          data={filteredExpensesState}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ExpenseItem
-              expense={item}
-              onEdit={() => handleEditExpense(item)}
-              onDelete={() => handleDeleteExpense(item)}
-              onTogglePaid={() => handleTogglePaid(item)}
-            />
-          )}
-          contentContainerStyle={styles.listContainer}
-        />
+        <>
+          {/* dentro da verificação filteredExpensesState.length > 0 */}
+          {activeTab === "FIXED" && <ExpenseProgressChart showFixedExpenses={true} showVariableExpenses={false} />}
+          {/* Modifique o FlatList para limitar os itens mostrados quando não estiver expandido */}
+          <Animated.FlatList
+            data={expandedView ? filteredExpensesState : filteredExpensesState.slice(0, 3)}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <ExpenseItem
+                expense={item}
+                onEdit={() => handleEditExpense(item)}
+                onDelete={() => handleDeleteExpense(item)}
+                onTogglePaid={() => handleTogglePaid(item)}
+              />
+            )}
+            contentContainerStyle={styles.listContainer}
+            ListHeaderComponent={
+              showFilters ? (
+                <View>
+                  {/* Search bar */}
+                  <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color={colors.text + "80"} />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Buscar despesa..."
+                      placeholderTextColor={colors.text + "80"}
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                    {searchQuery ? (
+                      <TouchableOpacity onPress={() => setSearchQuery("")}>
+                        <Ionicons name="close-circle" size={20} color={colors.text + "80"} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  {/* Filters */}
+                  <View style={styles.filtersContainer}>
+                    {/* Sort button */}
+                    <TouchableOpacity style={styles.filterButton} onPress={() => setShowSortModal(true)}>
+                      <Ionicons name="funnel" size={20} color={colors.text} />
+                      <Text style={styles.filterText}>
+                        {sortType === "DATE" ? "Data" : sortType === "NAME" ? "Nome" : "Valor"}
+                      </Text>
+                      <Ionicons name={getSortIcon()} size={16} color={colors.text} style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+
+                    {/* Status filter button - only for fixed expenses */}
+                    {activeTab === "FIXED" && (
+                      <TouchableOpacity style={styles.filterButton} onPress={() => setShowStatusFilterModal(true)}>
+                        <Ionicons name="options" size={20} color={colors.text} />
+                        <Text style={styles.filterText}>{getStatusFilterLabel()}</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Payment method filter button */}
+                    <TouchableOpacity style={styles.filterButton} onPress={() => setShowPaymentMethodFilterModal(true)}>
+                      <Ionicons name="card" size={20} color={colors.text} />
+                      <Text style={styles.filterText}>{getPaymentMethodFilterLabel()}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.showFiltersButton} onPress={() => setShowFilters(true)}>
+                  <Text style={styles.showFiltersText}>Mostrar filtros</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.primary} />
+                </TouchableOpacity>
+              )
+            }
+            ListFooterComponent={
+              filteredExpensesState.length > 3 && (
+                <TouchableOpacity style={styles.navigateButton} onPress={() => setExpandedView(!expandedView)}>
+                  <Text style={styles.navigateButtonText}>{expandedView ? "Mostrar menos" : "Ver todas"}</Text>
+                  <Ionicons name={expandedView ? "chevron-up" : "chevron-down"} size={16} color={colors.primary} />
+                </TouchableOpacity>
+              )
+            }
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+              useNativeDriver: false,
+              listener: (event) => {
+                // Quando o usuário rolar para baixo, mostrar os filtros
+                if (event.nativeEvent.contentOffset.y < -50 && !showFilters) {
+                  setShowFilters(true)
+                }
+                // Quando o usuário rolar para cima, esconder os filtros
+                else if (event.nativeEvent.contentOffset.y > 50 && showFilters) {
+                  setShowFilters(false)
+                }
+              },
+            })}
+            scrollEventThrottle={16}
+          />
+        </>
       ) : (
         <View style={styles.emptyContainer}>
           <Ionicons name="receipt-outline" size={64} color={colors.text + "40"} />

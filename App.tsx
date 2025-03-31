@@ -19,6 +19,8 @@ import { useFinance } from "./context/FinanceContext"
 // Importar o componente AddExpenseButton
 import AddExpenseButton from "./components/AddExpenseButton"
 
+import PaymentMethodsScreen from "./screens/PaymentMethodsScreen"
+
 const Tab = createBottomTabNavigator()
 const Stack = createStackNavigator()
 
@@ -28,6 +30,7 @@ const SettingsStack = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="SettingsMain" component={SettingsScreen} />
       <Stack.Screen name="Categories" component={CategoriesScreen} />
+      <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
     </Stack.Navigator>
   )
 }

@@ -5,9 +5,8 @@ import { createContext, useState, useEffect, useContext } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 // Define types
-export type PaymentMethod = "PIX" | "CARD" | "CASH" | "OTHER"
+export type PaymentMethod = "PIX" | "CARD" | "CASH" | "OTHER" | string
 export type Category = string // Alterado para string para permitir categorias personalizadas
-export type ExpenseStatus = "PAID" | "PENDING" | "OVERDUE"
 
 // Interface para representar uma categoria personalizada
 export interface CustomCategory {
@@ -17,6 +16,16 @@ export interface CustomCategory {
   color: string // Cor para representação visual
   icon: string // Nome do ícone do Ionicons
 }
+
+// Logo após a definição da interface CustomCategory, adicionar a interface para métodos de pagamento personalizados
+export interface CustomPaymentMethod {
+  id: string
+  name: string
+  icon: string
+  color: string
+}
+
+export type ExpenseStatus = "PAID" | "PENDING" | "OVERDUE"
 
 // Atualizar a interface Expense para incluir a flag isFixed
 export interface Expense {
@@ -115,6 +124,12 @@ interface FinanceContextType {
   homeSections: HomeSection[]
   updateHomeSectionOrder: (sections: HomeSection[]) => void
   toggleHomeSectionVisibility: (sectionId: string) => void
+
+  // Adicionar métodos de pagamento customizados
+  customPaymentMethods: CustomPaymentMethod[]
+  addPaymentMethod: (method: Omit<CustomPaymentMethod, "id">) => string | null
+  updatePaymentMethod: (method: CustomPaymentMethod) => void
+  deletePaymentMethod: (id: string) => void
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined)
@@ -136,6 +151,15 @@ const DEFAULT_CATEGORIES: CustomCategory[] = [
   { id: "OTHER", name: "Outros", budget: 200, color: "#9966FF", icon: "apps" },
 ]
 
+// Nos valores DEFAULT, adicionar os métodos de pagamento padrão
+// Logo após DEFAULT_CATEGORIES, adicionar:
+const DEFAULT_PAYMENT_METHODS: CustomPaymentMethod[] = [
+  { id: "PIX", name: "PIX", icon: "flash", color: "#4BC0C0" },
+  { id: "CARD", name: "Cartão", icon: "card", color: "#FF6384" },
+  { id: "CASH", name: "Dinheiro", icon: "cash", color: "#FFCE56" },
+  { id: "OTHER", name: "Outro", icon: "ellipsis-horizontal", color: "#9966FF" },
+]
+
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [fixedExpenses, setFixedExpenses] = useState<Expense[]>([])
   const [variableExpenses, setVariableExpenses] = useState<Expense[]>([])
@@ -152,6 +176,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Estado para categorias personalizadas
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>(DEFAULT_CATEGORIES)
+
+  // No FinanceProvider, adicionar o estado para os métodos de pagamento personalizados
+  // Após a linha const [customCategories, setCustomCategories] = useState<CustomCategory[]>(DEFAULT_CATEGORIES)
+  const [customPaymentMethods, setCustomPaymentMethods] = useState<CustomPaymentMethod[]>(DEFAULT_PAYMENT_METHODS)
 
   // Novos estados para reset mensal e histórico
   const [resetDay, setResetDay] = useState<number>(1) // Dia 1 por padrão
@@ -189,12 +217,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const monthlyPaymentStatusData = await AsyncStorage.getItem("monthlyPaymentStatus")
         const homeSectionsData = await AsyncStorage.getItem("homeSections")
 
+        // No useEffect que carrega dados do AsyncStorage, adicionar o carregamento dos métodos de pagamento
+        // Dentro do bloco try do loadData
+        const customPaymentMethodsData = await AsyncStorage.getItem("customPaymentMethods")
+
         if (fixedData) setFixedExpenses(JSON.parse(fixedData))
         if (variableData) setVariableExpenses(JSON.parse(variableData))
         if (lockedData) setIsLocked(JSON.parse(lockedData))
         if (syncData) setSyncWithFirebase(JSON.parse(syncData))
         if (customTabNamesData) setCustomTabNames(JSON.parse(customTabNamesData))
         if (customCategoriesData) setCustomCategories(JSON.parse(customCategoriesData))
+        if (customPaymentMethodsData) setCustomPaymentMethods(JSON.parse(customPaymentMethodsData))
         if (resetDayData) setResetDay(Number.parseInt(resetDayData))
         if (monthlyHistoryData) setMonthlyHistory(JSON.parse(monthlyHistoryData))
         if (monthlyPaymentStatusData) setMonthlyPaymentStatus(JSON.parse(monthlyPaymentStatusData))
@@ -224,6 +257,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await AsyncStorage.setItem("resetDay", resetDay.toString())
         await AsyncStorage.setItem("monthlyHistory", JSON.stringify(monthlyHistory))
         await AsyncStorage.setItem("monthlyPaymentStatus", JSON.stringify(monthlyPaymentStatus))
+
+        // No useEffect que salva dados no AsyncStorage, adicionar a persistência dos métodos de pagamento
+        // Dentro do bloco try do saveData
+        await AsyncStorage.setItem("customPaymentMethods", JSON.stringify(customPaymentMethods))
       } catch (error) {
         console.error("Error saving data to AsyncStorage:", error)
       }
@@ -238,6 +275,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     isLoaded,
     customTabNames,
     customCategories,
+    // Atualizar a dependência do useEffect para incluir customPaymentMethods
+    // No array de dependências:
+    customPaymentMethods,
     resetDay,
     monthlyHistory,
     monthlyPaymentStatus,
@@ -686,6 +726,39 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     })
   }
 
+  // Adicionar as funções para gerenciar os métodos de pagamento
+  // Após as funções de gerenciamento de categorias, adicionar:
+
+  // Funções para gerenciar métodos de pagamento personalizados
+  const addPaymentMethod = (method: Omit<CustomPaymentMethod, "id">): string | null => {
+    if (isLocked) return null
+    const newMethod = {
+      ...method,
+      id: Date.now().toString(),
+    }
+    setCustomPaymentMethods((prev) => [...prev, newMethod])
+    return newMethod.id
+  }
+
+  const updatePaymentMethod = (method: CustomPaymentMethod) => {
+    if (isLocked) return
+    setCustomPaymentMethods((prev) => prev.map((item) => (item.id === method.id ? method : item)))
+  }
+
+  const deletePaymentMethod = (id: string) => {
+    if (isLocked) return
+
+    // Verificar se o método de pagamento está sendo usado em alguma despesa
+    const isUsed = [...fixedExpenses, ...variableExpenses].some((expense) => expense.paymentMethod === id)
+
+    if (isUsed) {
+      console.error("Não é possível excluir um método de pagamento que está sendo usado em despesas")
+      return
+    }
+
+    setCustomPaymentMethods((prev) => prev.filter((item) => item.id !== id))
+  }
+
   const value = {
     monthlyBudget,
     fixedExpenses,
@@ -729,6 +802,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     homeSections,
     updateHomeSectionOrder,
     toggleHomeSectionVisibility,
+    // No objeto value do provider, adicionar os novos métodos
+    customPaymentMethods,
+    addPaymentMethod,
+    updatePaymentMethod,
+    deletePaymentMethod,
   }
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>

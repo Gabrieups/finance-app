@@ -84,6 +84,11 @@ const SettingsScreen: React.FC = () => {
     navigation.navigate("Home", { activateEditMode: true })
   }
 
+  // Na função navigateToCategories, adicione uma nova função para navegação para métodos de pagamento
+  const navigateToPaymentMethods = () => {
+    navigation.navigate("PaymentMethods")
+  }
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -272,6 +277,11 @@ const SettingsScreen: React.FC = () => {
 
           <TouchableOpacity style={styles.settingItem} onPress={navigateToCategories}>
             <Text style={styles.settingLabel}>Gerenciar Categorias</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.text + "80"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem} onPress={navigateToPaymentMethods}>
+            <Text style={styles.settingLabel}>Métodos de Pagamento</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.text + "80"} />
           </TouchableOpacity>
         </View>

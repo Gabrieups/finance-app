@@ -52,7 +52,7 @@ const MonthNavigator: React.FC = () => {
       alignItems: "center",
       backgroundColor: colors.card,
       borderRadius: 8,
-      padding: 12,
+      padding: 4,
       marginBottom: 16,
     },
     monthContainer: {
@@ -66,7 +66,7 @@ const MonthNavigator: React.FC = () => {
     monthText: {
       fontSize: 18,
       fontWeight: "bold",
-      color: colors.text,
+      color: isCurrentMonth ? colors.success : colors.warning
     },
     yearText: {
       fontSize: 12,
@@ -118,16 +118,6 @@ const MonthNavigator: React.FC = () => {
           <Text style={styles.monthText}>{monthName}</Text>
           <Text style={styles.yearText}>{year}</Text>
         </View>
-        {isCurrentMonth && (
-          <View style={styles.currentMonthIndicator}>
-            <Text style={styles.currentMonthText}>Atual</Text>
-          </View>
-        )}
-        {isFutureMonth() && (
-          <View style={styles.futureMonthIndicator}>
-            <Text style={styles.futureMonthText}>Futuro</Text>
-          </View>
-        )}
       </View>
 
       <TouchableOpacity style={styles.navButton} onPress={handleNextMonth}>

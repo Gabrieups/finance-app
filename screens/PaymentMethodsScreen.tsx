@@ -4,55 +4,42 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ScrollView, Modal } from "react-native"
 import { useTheme } from "../context/ThemeContext"
-import { useFinance, type CustomCategory } from "../context/FinanceContext"
+import { useFinance, type CustomPaymentMethod } from "../context/FinanceContext"
 import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
-import BudgetProgressBar from "../components/BudgetProgressBar"
 
-const CategoriesScreen: React.FC = () => {
+const PaymentMethodsScreen: React.FC = () => {
   const { colors } = useTheme()
-  const {
-    customCategories,
-    addCategory,
-    updateCategory,
-    deleteCategory,
-    isLocked,
-    monthlyBudget,
-    getCategoryBudget,
-    getCategorySpent,
-    getCategoryRemaining,
-    getCategoryProgress,
-  } = useFinance()
+  const { customPaymentMethods, addPaymentMethod, updatePaymentMethod, deletePaymentMethod, isLocked } = useFinance()
 
   const navigation = useNavigation()
 
   const [showForm, setShowForm] = useState(false)
-  const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null)
+  const [editingMethod, setEditingMethod] = useState<CustomPaymentMethod | null>(null)
   const [name, setName] = useState("")
   const [color, setColor] = useState("#FF6384")
-  const [budget, setBudget] = useState("")
-  const budgetInputRef = useRef<TextInput>(null)
+  const [icon, setIcon] = useState("card")
+  const nameInputRef = useRef<TextInput>(null)
 
-  // Adicionar estado para o ícone
-  const [icon, setIcon] = useState("apps")
-
-  // Adicionar lista de ícones predefinidos
+  // Lista de ícones predefinidos
   const predefinedIcons = [
-    "calendar",
-    "cart",
-    "game-controller",
-    "car",
-    "apps",
-    "home",
-    "restaurant",
-    "medkit",
-    "book",
-    "airplane",
-    "fitness",
-    "gift",
+    "card",
+    "card-outline",
+    "cash",
+    "cash-outline",
+    "wallet",
+    "wallet-outline",
+    "flash",
+    "flash-outline",
     "pricetag",
-    "school",
-    "bus",
+    "pricetag-outline",
+    "basket",
+    "basket-outline",
+    "cart",
+    "cart-outline",
+    "gift",
+    "gift-outline",
+    "ellipsis-horizontal",
   ]
 
   const predefinedColors = [
@@ -68,81 +55,65 @@ const CategoriesScreen: React.FC = () => {
     "#EF9A9A",
   ]
 
-  // Atualizar o handleEditCategory para incluir o ícone
-  const handleEditCategory = (category: CustomCategory) => {
+  const handleEditMethod = (method: CustomPaymentMethod) => {
     if (isLocked) return
-    setEditingCategory(category)
-    setName(category.name)
-    setColor(category.color)
-    setBudget(category.budget.toString())
-    setIcon(category.icon || "apps")
+    setEditingMethod(method)
+    setName(method.name)
+    setColor(method.color)
+    setIcon(method.icon)
     setShowForm(true)
   }
 
-  // Atualizar o handleAddCategory para incluir o ícone padrão
-  const handleAddCategory = () => {
+  const handleAddMethod = () => {
     if (isLocked) return
-    setEditingCategory(null)
+    setEditingMethod(null)
     setName("")
     setColor(predefinedColors[0])
-    setBudget("")
-    setIcon("apps")
+    setIcon("card")
     setShowForm(true)
   }
 
   useEffect(() => {
-    // Quando o formulário é aberto, focar no campo de orçamento
-    if (showForm && budgetInputRef.current) {
+    if (showForm && nameInputRef.current) {
       setTimeout(() => {
-        budgetInputRef.current?.focus()
+        nameInputRef.current?.focus()
       }, 100)
     }
   }, [showForm])
 
-  const handleDeleteCategory = (category: CustomCategory) => {
+  const handleDeleteMethod = (method: CustomPaymentMethod) => {
     if (isLocked) return
 
-    Alert.alert("Confirmar exclusão", `Tem certeza que deseja excluir a categoria "${category.name}"?`, [
+    Alert.alert("Confirmar exclusão", `Tem certeza que deseja excluir o método "${method.name}"?`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Excluir",
         style: "destructive",
-        onPress: () => deleteCategory(category.id),
+        onPress: () => deletePaymentMethod(method.id),
       },
     ])
   }
 
-  // Atualizar o handleSubmit para incluir o ícone
   const handleSubmit = () => {
     if (!name.trim()) {
-      Alert.alert("Erro", "O nome da categoria é obrigatório")
+      Alert.alert("Erro", "O nome do método de pagamento é obrigatório")
       return
     }
 
-    const budgetValue = Number.parseFloat(budget)
-    if (isNaN(budgetValue) || budgetValue < 0) {
-      Alert.alert("Erro", "O orçamento deve ser um valor numérico positivo")
-      return
-    }
-
-    if (editingCategory) {
-      // Atualizar categoria existente
-      updateCategory({
-        ...editingCategory,
+    if (editingMethod) {
+      updatePaymentMethod({
+        ...editingMethod,
         name,
         color,
-        budget: budgetValue,
         icon,
       })
     } else {
-      // Adicionar nova categoria
-      const newCategory = {
+      const newMethod = {
         name,
         color,
-        budget: budgetValue,
         icon,
       }
-      addCategory(newCategory)
+      addPaymentMethod(newMethod)
     }
 
     setShowForm(false)
@@ -167,13 +138,6 @@ const CategoriesScreen: React.FC = () => {
       color: colors.text + "99",
       marginBottom: 16,
     },
-    totalBudget: {
-      fontSize: 16,
-      fontWeight: "bold",
-      color: colors.primary,
-      marginBottom: 16,
-      textAlign: "center",
-    },
     addButton: {
       backgroundColor: colors.primary,
       padding: 12,
@@ -181,14 +145,14 @@ const CategoriesScreen: React.FC = () => {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 5,
+      marginBottom: 16,
     },
     addButtonText: {
       color: "#FFFFFF",
       fontWeight: "bold",
       marginLeft: 8,
     },
-    categoryItem: {
+    methodItem: {
       backgroundColor: colors.card,
       borderRadius: 8,
       padding: 16,
@@ -199,37 +163,25 @@ const CategoriesScreen: React.FC = () => {
       shadowRadius: 2,
       elevation: 2,
     },
-    categoryHeader: {
+    methodHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 8,
     },
-    categoryName: {
+    methodName: {
       fontSize: 18,
       fontWeight: "bold",
       color: colors.text,
       flex: 1,
     },
-    categoryColor: {
-      width: 30,
-      height: 30,
-      borderRadius: 20,
-      marginRight: 8,
-    },
-    budgetInfo: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: 8,
-    },
-    budgetLabel: {
-      fontSize: 14,
-      color: colors.text + "99",
-    },
-    budgetValue: {
-      fontSize: 14,
-      fontWeight: "bold",
-      color: colors.text,
+    methodIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
     },
     actions: {
       flexDirection: "row",
@@ -278,23 +230,42 @@ const CategoriesScreen: React.FC = () => {
     colorPicker: {
       flexDirection: "row",
       flexWrap: "wrap",
+      justifyContent: "center",
     },
     colorOption: {
       width: 36,
       height: 36,
       borderRadius: 18,
-      marginLeft: 16,
-      marginVertical: 4,
+      margin: 8,
       borderWidth: 2,
       borderColor: "transparent",
     },
     colorSelected: {
       borderColor: colors.primary,
     },
+    iconPicker: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "center",
+    },
+    iconOption: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      margin: 6,
+      borderWidth: 2,
+      borderColor: "transparent",
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: colors.background,
+    },
+    iconSelected: {
+      borderColor: colors.primary,
+    },
     buttonContainer: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginTop: 2,
+      marginTop: 16,
     },
     button: {
       flex: 1,
@@ -340,23 +311,9 @@ const CategoriesScreen: React.FC = () => {
       color: colors.text,
       marginLeft: 8,
     },
-    iconPicker: {
+    methodInfo: {
       flexDirection: "row",
-      flexWrap: "wrap",
-    },
-    iconOption: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      margin: 4,
-      borderWidth: 2,
-      borderColor: "transparent",
-      justifyContent: "center",
       alignItems: "center",
-      backgroundColor: colors.background,
-    },
-    iconSelected: {
-      borderColor: colors.primary,
     },
   })
 
@@ -368,60 +325,38 @@ const CategoriesScreen: React.FC = () => {
           <Text style={styles.backButtonText}>Voltar</Text>
         </TouchableOpacity>
 
-        <Text style={styles.totalBudget}>Orçamento Total: R$ {monthlyBudget.toFixed(2)}</Text>
+        <Text style={styles.title}>Métodos de Pagamento</Text>
+        <Text style={styles.subtitle}>Gerencie os métodos de pagamento disponíveis no aplicativo.</Text>
 
         {!isLocked && (
-          <TouchableOpacity style={styles.addButton} onPress={handleAddCategory}>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddMethod}>
             <Ionicons name="add" size={20} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Nova Categoria</Text>
+            <Text style={styles.addButtonText}>Novo Método de Pagamento</Text>
           </TouchableOpacity>
         )}
       </View>
 
       <FlatList
-        data={customCategories}
+        data={customPaymentMethods}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item }) => (
-          <View style={styles.categoryItem}>
-            {
-              // Atualizar a renderização das categorias para mostrar ícones
-            }
-            <View style={styles.categoryHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={[styles.categoryColor, { backgroundColor: item.color, alignItems: "center", justifyContent: "center" }]}>
-                  <Ionicons name={item.icon || "apps"} size={18} color={colors.text} />
+          <View style={styles.methodItem}>
+            <View style={styles.methodHeader}>
+              <View style={styles.methodInfo}>
+                <View style={[styles.methodIcon, { backgroundColor: item.color }]}>
+                  <Ionicons name={item.icon} size={20} color="#FFFFFF" />
                 </View>
-                <Text style={styles.categoryName}>{item.name}</Text>
-                <Text style={styles.budgetValue}>R$ {item.budget.toFixed(2)}</Text>
+                <Text style={styles.methodName}>{item.name}</Text>
               </View>
             </View>
 
-            <View style={styles.budgetInfo}>
-              <Text style={styles.budgetLabel}>Gasto:</Text>
-              <Text style={styles.budgetValue}>R$ {getCategorySpent(item.id).toFixed(2)}</Text>
-            </View>
-
-            <View style={styles.budgetInfo}>
-              <Text style={styles.budgetLabel}>Restante:</Text>
-              <Text
-                style={[
-                  styles.budgetValue,
-                  { color: getCategoryRemaining(item.id) >= 0 ? colors.success : colors.danger },
-                ]}
-              >
-                R$ {getCategoryRemaining(item.id).toFixed(2)}
-              </Text>
-            </View>
-
-            <BudgetProgressBar current={getCategorySpent(item.id)} total={item.budget} />
-
             {!isLocked && (
               <View style={styles.actions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleEditCategory(item)}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleEditMethod(item)}>
                   <Ionicons name="create-outline" size={20} color={colors.primary} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteCategory(item)}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteMethod(item)}>
                   <Ionicons name="trash-outline" size={20} color={colors.danger} />
                 </TouchableOpacity>
               </View>
@@ -430,9 +365,10 @@ const CategoriesScreen: React.FC = () => {
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="folder-open-outline" size={64} color={colors.text + "40"} />
+            <Ionicons name="wallet-outline" size={64} color={colors.text + "40"} />
             <Text style={styles.emptyText}>
-              Nenhuma categoria encontrada. {!isLocked ? "Toque no botão + para adicionar." : ""}
+              Nenhum método de pagamento personalizado.
+              {!isLocked ? " Toque no botão + para adicionar." : ""}
             </Text>
           </View>
         }
@@ -442,28 +378,18 @@ const CategoriesScreen: React.FC = () => {
         <Modal visible={showForm} transparent={true} animationType="fade" onRequestClose={() => setShowForm(false)}>
           <View style={styles.modalContainer}>
             <ScrollView style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{editingCategory ? "Editar Categoria" : "Nova Categoria"}</Text>
+              <Text style={styles.modalTitle}>
+                {editingMethod ? "Editar Método de Pagamento" : "Novo Método de Pagamento"}
+              </Text>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Nome</Text>
                 <TextInput
+                  ref={nameInputRef}
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
-                  placeholder="Nome da categoria"
-                  placeholderTextColor={colors.text + "80"}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Orçamento (R$)</Text>
-                <TextInput
-                  ref={budgetInputRef}
-                  style={styles.input}
-                  value={budget}
-                  onChangeText={setBudget}
-                  keyboardType="numeric"
-                  placeholder="0.00"
+                  placeholder="Nome do método de pagamento"
                   placeholderTextColor={colors.text + "80"}
                 />
               </View>
@@ -512,5 +438,4 @@ const CategoriesScreen: React.FC = () => {
   )
 }
 
-export default CategoriesScreen
-
+export default PaymentMethodsScreen

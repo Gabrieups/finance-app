@@ -15,12 +15,12 @@ interface ExpenseItemProps {
 
 const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, onTogglePaid }) => {
   const { colors } = useTheme()
-  const { isLocked, getExpenseStatus, currentMonth } = useFinance()
+  const { isLocked, getExpenseStatus, currentMonth, customPaymentMethods } = useFinance()
 
   const getAdjustedDueDate = (dueDate: string, currentMonth: string) => {
     const [year, month, day] = dueDate.split("-").map(Number)
     return `${currentMonth}-${day.toString().padStart(2, "0")}`
-  }  
+  }
 
   // Get the adjusted due date for fixed expenses
   const adjustedDueDate =
@@ -51,18 +51,29 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
     }
   }
 
-  const getPaymentMethodLabel = (method: PaymentMethod): string => {
+  const getPaymentMethodInfo = (method: PaymentMethod) => {
+    // Primeiro, procura nos métodos de pagamento personalizados
+    const customMethod = customPaymentMethods.find((m) => m.id === method)
+
+    if (customMethod) {
+      return {
+        label: customMethod.name,
+        icon: customMethod.icon,
+      }
+    }
+
+    // Fallback para o sistema antigo
     switch (method) {
       case "PIX":
-        return "PIX"
+        return { label: "PIX", icon: "flash" }
       case "CARD":
-        return "Cartão"
+        return { label: "Cartão", icon: "card" }
       case "CASH":
-        return "Dinheiro"
+        return { label: "Dinheiro", icon: "cash" }
       case "OTHER":
-        return "Outro"
+        return { label: "Outro", icon: "ellipsis-horizontal" }
       default:
-        return "Outro"
+        return { label: "Outro", icon: "ellipsis-horizontal" }
     }
   }
 
@@ -80,21 +91,6 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
         return "apps"
       default:
         return "apps"
-    }
-  }
-
-  const getPaymentMethodIcon = (method: PaymentMethod): string => {
-    switch (method) {
-      case "PIX":
-        return "flash"
-      case "CARD":
-        return "card"
-      case "CASH":
-        return "cash"
-      case "OTHER":
-        return "ellipsis-horizontal"
-      default:
-        return "ellipsis-horizontal"
     }
   }
 
@@ -213,6 +209,8 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
     },
   })
 
+  const paymentMethodInfo = getPaymentMethodInfo(expense.paymentMethod)
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -227,8 +225,8 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onEdit, onDelete, on
         </View>
 
         <View style={styles.detailItem}>
-          <Ionicons name={getPaymentMethodIcon(expense.paymentMethod)} size={16} color={colors.text + "99"} />
-          <Text style={styles.detailText}>{getPaymentMethodLabel(expense.paymentMethod)}</Text>
+          <Ionicons name={paymentMethodInfo.icon} size={16} color={colors.text + "99"} />
+          <Text style={styles.detailText}>{paymentMethodInfo.label}</Text>
         </View>
 
         {expense.date && !expense.isFixed && (

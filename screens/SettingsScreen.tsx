@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert, ScrollView, TextInput } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from "react-native"
 import { useTheme } from "../context/ThemeContext"
 import { useFinance } from "../context/FinanceContext"
 import { Ionicons } from "@expo/vector-icons"
@@ -74,6 +74,19 @@ const SettingsScreen: React.FC = () => {
 
   const navigateToCategories = () => {
     navigation.navigate("Categories")
+  }
+
+  // Adicionar a função para navegar para a tela Home com modo de edição ativado
+  // Adicionar esta função após a função navigateToCategories:
+
+  const navigateToHomeOrganizer = () => {
+    // Navegar para a tela Home e passar um parâmetro para ativar o modo de edição
+    navigation.navigate("Home", { activateEditMode: true })
+  }
+
+  // Na função navigateToCategories, adicione uma nova função para navegação para métodos de pagamento
+  const navigateToPaymentMethods = () => {
+    navigation.navigate("PaymentMethods")
   }
 
   const styles = StyleSheet.create({
@@ -214,7 +227,6 @@ const SettingsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.content}>
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Aplicativo</Text>
 
@@ -252,6 +264,28 @@ const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Adicionar uma nova seção para personalização da interface */}
+        {/* Adicionar esta seção antes do botão de exportar dados: */}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Personalização da Interface</Text>
+
+          <TouchableOpacity style={styles.settingItem} onPress={navigateToHomeOrganizer}>
+            <Text style={styles.settingLabel}>Organizar Tela Inicial</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.text + "80"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem} onPress={navigateToCategories}>
+            <Text style={styles.settingLabel}>Gerenciar Categorias</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.text + "80"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem} onPress={navigateToPaymentMethods}>
+            <Text style={styles.settingLabel}>Métodos de Pagamento</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.text + "80"} />
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity style={styles.exportButton} onPress={handleExportData}>
           <Text style={styles.exportButtonText}>Exportar Dados</Text>
         </TouchableOpacity>
@@ -261,4 +295,3 @@ const SettingsScreen: React.FC = () => {
 }
 
 export default SettingsScreen
-

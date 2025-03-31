@@ -1,3 +1,5 @@
+"use client"
+
 import type React from "react"
 import { View, Text, StyleSheet, Dimensions } from "react-native"
 import { PieChart } from "react-native-chart-kit"
@@ -93,8 +95,9 @@ const CategoryChart: React.FC = () => {
         }}
         accessor="amount"
         backgroundColor="transparent"
-        paddingLeft="10"
+        paddingLeft="80"
         absolute
+        hasLegend={false}
       />
 
       <View style={styles.legendContainer}>

@@ -18,28 +18,37 @@ const PriceInput: React.FC<PriceInputProps> = ({ value, onChangeText, error }) =
   const [decimal, setDecimal] = useState("")
 
   useEffect(() => {
-    const safeValue = value != null ? value.toString() : "";
+    const safeValue = value != null ? value.toString() : ""
 
-    const numericValue = safeValue.replace(/[^0-9]/g, "");
+    // Remove non-numeric characters
+    const numericValue = safeValue.replace(/[^0-9]/g, "")
 
-    const paddedValue = numericValue.padStart(3, "0");
+    // Convert to cents (integer)
+    const valueInCents = numericValue === "" ? 0 : Number.parseInt(numericValue, 10)
 
-    const decimalPart = paddedValue.slice(-2);
-    const wholePart = paddedValue.slice(0, -2) || "0";
-    const cleanWholePart = wholePart.replace(/^0+/, "") || "0";
+    // Convert cents to a formatted string with decimal part
+    const reals = Math.floor(valueInCents / 100)
+    const cents = valueInCents % 100
 
-    setWholeNumber(cleanWholePart);
-    setDecimal(decimalPart);
-    setFormattedValue(`${cleanWholePart},${decimalPart}`);
-  }, [value]);
+    // Format the parts
+    const formattedReals = reals === 0 && numericValue === "" ? "" : reals.toString()
+    const formattedCents = cents.toString().padStart(2, "0")
 
+    setWholeNumber(formattedReals || "0")
+    setDecimal(formattedCents)
+    setFormattedValue(`${formattedReals || "0"},${formattedCents}`)
+  }, [value])
 
   const handleTextChange = (text?: string) => {
-    const safeText = text ?? "";
-    const numericValue = safeText.replace(/[^0-9]/g, "");
-    onChangeText(numericValue);
-  };
+    const safeText = text ?? ""
+    const numericValue = safeText.replace(/[^0-9]/g, "")
 
+    // Convert the input to a value in cents
+    const valueInCents = numericValue === "" ? 0 : Number.parseInt(numericValue, 10)
+
+    // Pass the value in cents as a string
+    onChangeText(valueInCents.toString())
+  }
 
   const styles = StyleSheet.create({
     container: {
@@ -52,7 +61,7 @@ const PriceInput: React.FC<PriceInputProps> = ({ value, onChangeText, error }) =
       fontSize: 16,
       color: error ? colors.danger : colors.text,
       marginRight: 3,
-      marginTop: 15
+      marginTop: 15,
     },
     input: {
       flex: 1,
@@ -79,7 +88,7 @@ const PriceInput: React.FC<PriceInputProps> = ({ value, onChangeText, error }) =
       fontSize: 24,
       color: error ? colors.danger : colors.text,
       marginLeft: 3,
-      marginTop: 12
+      marginTop: 12,
     },
   })
 
@@ -88,7 +97,7 @@ const PriceInput: React.FC<PriceInputProps> = ({ value, onChangeText, error }) =
       <Text style={styles.currencySymbol}>R$</Text>
       <View style={styles.valueContainer}>
         <Text style={styles.wholeNumber}>{wholeNumber}</Text>
-        <Text style={styles.decimal}>{decimal}</Text>
+        <Text style={styles.decimal}>,{decimal}</Text>
       </View>
       <TextInput
         style={styles.input}
